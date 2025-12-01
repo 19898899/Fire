@@ -65,10 +65,10 @@
 			"filterable": 0
 
 		},{
-			"key": "luoli",
+			"key": "萝莉",
 			"name": "🍉｜萝莉",
 			"type": 3,
-			"api": "./luoli.py",
+			"api": "./萝莉.py",
 			"searchable": 1,
 			"quickSearch": 0,
 			"filterable": 0
