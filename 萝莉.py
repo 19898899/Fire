@@ -333,7 +333,21 @@ class Spider(Spider):
                 videos = self.get_video_list(page="1", params=params, api_path=api_path)
                 print(f"🔍 获取到的视频数量: {len(videos)}")
             except Exception as e:
-        pass
+                print(f"❌ 获取视频列表失败: {e}")
+                videos = []
+        else:
+            print("❌ 错误: 没有找到可用的默认分类")
+        
+        result['class'] = classes
+        result['list'] = videos  # 恢复视频列表显示
+        
+        # 首页返回所有分类的过滤器
+        if all_filters:
+            result['filters'] = all_filters
+            print(f"首页返回所有分类过滤器，共 {len(all_filters)} 个分类")
+        
+        print(f"首页内容加载完成: {len(classes)}个分类, {len(videos)}个视频")
+        return result
 
     def categoryContent(self, tid, pg, filter, extend):
         """分类内容"""
