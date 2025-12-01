@@ -229,25 +229,6 @@ class Spider(Spider):
                 cfg = self.category_config.get(default_tid, {})
                 print(f"🔍 默认分类配置: {cfg}")
                 
-                # 首页加载时同时获取系列数据
-                if cfg.get('api', '').endswith('/navigation/theme') and not cfg.get('series'):
-                    print(f"🔍 首页预加载默认分类的系列数据...")
-                    api_path = cfg.get('api') or ''
-                    params = cfg.get('params', {}).copy()
-                    params.setdefault('theme', '')
-                    params.setdefault('page', '1')
-                    theme_data = self.make_api_request(api_path, params)
-                    series = []
-                    if isinstance(theme_data, dict):
-                        list_data = theme_data.get('list', [])
-                        for block in list_data:
-                            sid = block.get('id')
-                            title = block.get('title')
-                            if sid and title:
-                                series.append({'id': sid, 'name': title})
-                    cfg['series'] = series
-                    print(f"🔍 默认分类预加载了 {len(series)} 个系列")
-                
                 api_path = cfg.get('api') or '/api.php/api/navigation/theme'
                 params = cfg.get('params', {}).copy()
                 params.setdefault('theme', '')
@@ -886,29 +867,7 @@ class Spider(Spider):
                     'params': item.get('params', {}) or {}
                 }
                 self.category_config[tid] = cfg
-            # 为所有分类加载系列数据，实现完整的过滤功能
-            for tid, cfg in list(self.category_config.items()):
-                api_path = cfg.get('api') or ''
-                params = cfg.get('params', {}).copy()
-                
-                # 为所有使用 theme 接口的分类加载系列数据
-                if api_path.endswith('/navigation/theme'):
-                    print(f"🔍 为分类 {cfg.get('name')} (tid={tid}) 加载系列数据...")
-                    params.setdefault('theme', '')
-                    params.setdefault('page', '1')
-                    theme_data = self.make_api_request(api_path, params)
-                    series = []
-                    if isinstance(theme_data, dict):
-                        for block in theme_data.get('list', []):
-                            sid = block.get('id')
-                            title = block.get('title')
-                            if sid and title:
-                                series.append({'id': sid, 'name': title})
-                    cfg['series'] = series
-                    print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
-                else:
-                    # 其他接口类型的分类使用空系列
-                    cfg['series'] = []
+            print(f"🔍 分类配置加载完成，共 {len(self.category_config)} 个分类")
         except Exception as e:
             print(f"加载分类失败: {e}")
 
