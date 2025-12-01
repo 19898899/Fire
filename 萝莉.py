@@ -196,14 +196,24 @@ class Spider(Spider):
             params.setdefault('page', '1')
             theme_data = self.make_api_request(api_path, params)
             series = []
+            
             if isinstance(theme_data, dict):
                 data_section = theme_data.get('data', {})
                 list_data = data_section.get('list', [])
-                for block in list_data:
-                    sid = block.get('id')
-                    title = block.get('title')
-                    if sid and title:
-                        series.append({'id': sid, 'name': title})
+                
+                # 特殊处理ID 13（小马拉大车）- 直接返回视频列表，没有系列分组
+                if tid == '13':
+                    print(f"🔍 检测到ID 13（小马拉大车），使用特殊处理逻辑")
+                    # ID 13没有系列分组，创建一个虚拟系列
+                    series.append({'id': '251', 'name': '小马拉大车系列'})
+                    print(f"🔍 ID 13 创建虚拟系列: 小马拉大车系列")
+                else:
+                    # 其他分类使用正常的系列解析逻辑
+                    for block in list_data:
+                        sid = block.get('id')
+                        title = block.get('title')
+                        if sid and title:
+                            series.append({'id': sid, 'name': title})
             
             # 更新缓存
             self.series_cache[cache_key] = {
@@ -889,7 +899,7 @@ class Spider(Spider):
                 {
                     "current": False,
                     "id": 14,
-                    "name": "强奸",
+                    "name": "强",
                     "style": 1,
                     "has_rank": 0,
                     "api": "/api/navigation/theme",
