@@ -190,15 +190,29 @@ class Spider(Spider):
         classes = self.get_categories()
         print(f"🔍 获取到的分类数量: {len(classes)}")
         
+        # 确保所有分类的系列数据都已加载完成
+        print(f"🔍 确保分类数据完全加载...")
+        # 强制触发分类加载（如果还没有加载的话）
+        if not self._categories_loaded:
+            self.load_categories()
+            self._categories_loaded = True
+        
         # 设置过滤器
         filters = {}
+        print(f"🔍 开始设置过滤器，分类配置数量: {len(self.category_config)}")
         for tid, cfg in self.category_config.items():
             series = cfg.get('series') or []
+            print(f"🔍 分类 {cfg.get('name')} (tid={tid}) 的系列数量: {len(series)}")
             if series:
                 options = [{'n': '全部', 'v': ''}]
                 for s in series:
                     options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
                 filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+                print(f"🔍 为分类 {cfg.get('name')} 设置了过滤器，选项数量: {len(options)}")
+            else:
+                print(f"🔍 分类 {cfg.get('name')} 没有系列数据，跳过过滤器设置")
+        
+        print(f"🔍 最终设置的过滤器数量: {len(filters)}")
         
         # 选择默认分类
         default_tid = None
