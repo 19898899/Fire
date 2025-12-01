@@ -364,8 +364,12 @@ class Spider(Spider):
         # 按需加载该分类的系列数据（使用缓存）
         series = cfg.get('series') or []
         if not series and cfg.get('api', '').endswith('/navigation/theme'):
+            print(f"🔍 用户访问分类 {cfg.get('name')}，开始动态加载系列数据...")
             series = self.get_series_with_cache(tid, cfg)
             cfg['series'] = series
+            print(f"🔍 分类 {cfg.get('name')} 系列数据加载完成，共 {len(series)} 个系列")
+        else:
+            print(f"🔍 分类 {cfg.get('name')} 已有系列数据，共 {len(series)} 个系列")
         
         # 设置过滤器（动态返回给前端）
         filters = {}
@@ -375,6 +379,8 @@ class Spider(Spider):
                 options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
             filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
             print(f"🔍 为分类 {cfg.get('name')} 动态设置过滤器，选项数量: {len(options)}")
+        else:
+            print(f"🔍 分类 {cfg.get('name')} 没有系列数据，不设置过滤器")
         
         series_id = None
         sort = None
@@ -703,6 +709,10 @@ class Spider(Spider):
         response_data = self.make_api_request(api_path, extra_params)
         if not response_data:
             return []
+        
+        print(f"🔍 API路径: {api_path}")
+        print(f"🔍 响应数据结构: {type(response_data)}")
+        
         # theme 接口的新结构: { data: { list: [ {id,title,list:[video...]} ] } }
         if isinstance(response_data, dict) and api_path.endswith('/navigation/theme'):
             items = []
@@ -716,6 +726,15 @@ class Spider(Spider):
                 if isinstance(sub_list, list):
                     items.extend(sub_list)
             return self.parse_video_list(items)
+        
+        # seriesMvList 接口结构: { data: { list: [video...] } } 或直接是视频列表
+        elif isinstance(response_data, dict) and api_path.endswith('/navigation/seriesMvList'):
+            print(f"🔍 处理seriesMvList接口数据...")
+            data_block = response_data.get('data', {})
+            video_list = data_block.get('list', []) or response_data.get('list', [])
+            print(f"🔍 seriesMvList解析到 {len(video_list)} 个视频")
+            return self.parse_video_list(video_list)
+        
         return self.parse_video_list(response_data)
 
     def parse_video_list(self, data):
