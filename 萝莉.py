@@ -408,15 +408,57 @@ class Spider(Spider):
             
             # 先不使用代理尝试请求图片
             try:
-                direct_res = requests.get(url, headers=self.headers, timeout=10)
+                # 添加更合适的图片请求头
+                img_headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Referer': 'https://sapi01.eihpijd.xyz/',
+                    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                    'Accept-Language': 'zh-CN,zh;q=0.9'
+                }
+                direct_res = requests.get(url, headers=img_headers, timeout=15)
                 print(f"🔍 直接请求图片状态码: {direct_res.status_code}")
                 print(f"🔍 直接请求内容长度: {len(direct_res.content)}")
                 print(f"🔍 直接请求Content-Type: {direct_res.headers.get('Content-Type')}")
                 
-                # 直接对所有图片进行AES解密
+                if direct_res.status_code != 200:
+                    print(f"🔍 图片请求失败，状态码: {direct_res.status_code}")
+                    return [500, 'text/html', f'图片请求失败: {direct_res.status_code}']
+                
+                if len(direct_res.content) == 0:
+                    print(f"🔍 图片内容为空")
+                    return [500, 'text/html', '图片内容为空']
+                
+                # 检查是否需要解密 - 有些图片可能不需要解密
+                content_type = direct_res.headers.get('Content-Type', '')
+                print(f"🔍 原始Content-Type: {content_type}")
+                
+                # 尝试直接返回原始图片（不解密）
+                if content_type.startswith('image/'):
+                    print(f"🔍 尝试直接返回原始图片...")
+                    # 检查是否是有效的图片格式
+                    if (direct_res.content.startswith(b'\xFF\xD8\xFF') or  # JPEG
+                        direct_res.content.startswith(b'\x89PNG') or      # PNG
+                        direct_res.content.startswith(b'GIF87') or       # GIF
+                        direct_res.content.startswith(b'GIF89') or       # GIF
+                        direct_res.content.startswith(b'RIFF')):         # WebP
+                        print(f"🔍 检测到有效图片格式，直接返回")
+                        if direct_res.content.startswith(b'\xFF\xD8\xFF'):
+                            return [200, 'image/jpeg', direct_res.content]
+                        elif direct_res.content.startswith(b'\x89PNG'):
+                            return [200, 'image/png', direct_res.content]
+                        elif direct_res.content.startswith(b'GIF87') or direct_res.content.startswith(b'GIF89'):
+                            return [200, 'image/gif', direct_res.content]
+                        elif direct_res.content.startswith(b'RIFF'):
+                            return [200, 'image/webp', direct_res.content]
+                
+                # 如果直接返回失败，尝试AES解密
                 print(f"🔍 开始对图片进行AES解密...")
                 decrypted_img = self.aesimg(direct_res.content)
                 print(f"🔍 AES解密完成，解密后长度: {len(decrypted_img)}")
+                
+                if len(decrypted_img) == 0:
+                    print(f"🔍 解密后内容为空，返回原始内容")
+                    return [200, content_type or 'application/octet-stream', direct_res.content]
                 
                 # 检查解密后的数据格式并设置正确的Content-Type
                 if decrypted_img.startswith(b'\xFF\xD8\xFF'):
@@ -428,15 +470,19 @@ class Spider(Spider):
                 elif decrypted_img.startswith(b'GIF87a') or decrypted_img.startswith(b'GIF89a'):
                     print(f"🔍 解密成功！检测到GIF图片")
                     return [200, 'image/gif', decrypted_img]
-                elif decrypted_img.startswith(b'RIFF') and decrypted_img[8:12] == b'WEBP':
+                elif decrypted_img.startswith(b'RIFF') and len(decrypted_img) > 12 and decrypted_img[8:12] == b'WEBP':
                     print(f"🔍 解密成功！检测到WebP图片")
                     return [200, 'image/webp', decrypted_img]
                 else:
-                    print(f"🔍 解密完成但格式未知，返回解密数据")
-                    return [200, 'application/octet-stream', decrypted_img]
+                    print(f"🔍 解密完成但格式未知，返回原始内容")
+                    # 如果解密后格式未知，返回原始内容
+                    return [200, content_type or 'application/octet-stream', direct_res.content]
                         
             except Exception as e:
                 print(f"🔍 直接请求失败: {e}")
+                print(f"🔍 错误详情: {type(e).__name__}")
+                import traceback
+                traceback.print_exc()
             
             # 如果直接请求失败，再尝试使用图片代理（但仅用于HTTP）
             if url.startswith('http://'):
@@ -1013,25 +1059,23 @@ class Spider(Spider):
             return ""
 
     def aesimg(self, word):
-        """图片AES解密"""
+        """图片AES解密 - 增强版"""
         try:
-            print(f"🔍 开始AES解密，原始数据长度: {len(word)}")
-            print(f"🔍 原始数据前16字节: {word[:16]}")
-            
             key = b'f5d965df75336270'
             iv = b'97b60394abc2fbe1'
-            print(f"🔍 使用密钥: {key}")
-            print(f"🔍 使用IV: {iv}")
+            print(f"🔍 开始AES解密，原始长度: {len(word)}")
             
-            # 检查数据长度是否为16的倍数
+            if not word:
+                print(f"🔍 错误：输入数据为空")
+                return b''
+            
+            # 检查数据长度
             if len(word) % 16 != 0:
-                print(f"🔍 数据长度不是16的倍数，当前长度: {len(word)}")
-                # 如果不是16的倍数，可能需要填充
                 padding_needed = 16 - (len(word) % 16)
-                print(f"🔍 需要填充: {padding_needed} 字节")
-                # 但是AES-CBC解密时，数据长度应该是16的倍数
-                # 如果不是，说明数据可能有问题
-                print(f"🔍 警告：数据长度不符合AES块大小要求")
+                print(f"🔍 数据长度不是16的倍数，需要填充: {padding_needed} 字节")
+                # 尝试PKCS7填充
+                word = word + bytes([padding_needed] * padding_needed)
+                print(f"🔍 填充后长度: {len(word)}")
             
             # 确保数据长度至少为16字节
             if len(word) < 16:
@@ -1041,22 +1085,44 @@ class Spider(Spider):
             cipher = AES.new(key, AES.MODE_CBC, iv)
             decrypted = cipher.decrypt(word)
             print(f"🔍 AES解密（去填充前）长度: {len(decrypted)}")
-            print(f"🔍 解密后前16字节: {decrypted[:16]}")
             
             # 尝试去填充
             try:
                 decrypted = unpad(decrypted, AES.block_size)
                 print(f"🔍 去填充后长度: {len(decrypted)}")
-                print(f"🔍 去填充后前16字节: {decrypted[:16]}")
             except Exception as pad_error:
                 print(f"🔍 去填充失败: {pad_error}")
-                print(f"🔍 使用未去填充的数据")
+                # 尝试手动去除PKCS7填充
+                if len(decrypted) > 0:
+                    last_byte = decrypted[-1]
+                    if last_byte <= 16:  # PKCS7填充的最大值
+                        try:
+                            decrypted = decrypted[:-last_byte]
+                            print(f"🔍 手动去除填充后长度: {len(decrypted)}")
+                        except:
+                            print(f"🔍 手动去除填充失败，使用原始数据")
             
-            return decrypted
+            # 检查解密结果是否有效
+            if len(decrypted) == 0:
+                print(f"🔍 解密后数据为空")
+                return b''
+            
+            # 检查是否是有效的图片格式
+            if (decrypted.startswith(b'\xFF\xD8\xFF') or  # JPEG
+                decrypted.startswith(b'\x89PNG') or      # PNG
+                decrypted.startswith(b'GIF87') or       # GIF
+                decrypted.startswith(b'GIF89') or       # GIF
+                decrypted.startswith(b'RIFF')):         # WebP
+                print(f"🔍 解密成功，检测到有效图片格式")
+                return decrypted
+            else:
+                print(f"🔍 解密完成但未检测到有效图片格式")
+                print(f"🔍 解密后前32字节: {decrypted[:32]}")
+                return decrypted
+            
         except Exception as e:
             print(f"❌ 图片AES解密失败: {e}")
             print(f"❌ 错误类型: {type(e).__name__}")
             import traceback
-            print(f"❌ 详细错误: {traceback.format_exc()}")
-            # 如果解密失败，返回原始数据
-            return word
+            traceback.print_exc()
+            return word  # 返回原始数据
