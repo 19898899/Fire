@@ -123,7 +123,7 @@ class Spider(Spider):
 
     def init(self, extend="{}"):
 
-        self.domin = 'https://sapi01.eihpijd.xyz'
+        self.domin = 'https://sapi03.eihpijd.xyz'
         # 代理只用于图片，API请求不使用代理
         self.image_proxies = {
             'http': 'http://127.0.0.1:9978',
