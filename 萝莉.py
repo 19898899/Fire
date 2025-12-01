@@ -791,12 +791,99 @@ class Spider(Spider):
                 if video.get('vod_id') and video.get('vod_name'):
                     videos.append(video)
         return videos
+
+    def load_categories(self):
+        """加载导航大分类及其系列小分类（使用本地写死的数据，不再请求 navigation/index 接口）"""
         try:
-            encoded_url = self.e64(raw_pic)
-            vod_pic = f"{self.getProxyUrl()}&url={encoded_url}"
-        except Exception:
-            vod_pic = raw_pic
+            # 直接使用硬编码的分类数据
+            data = [
+                {
+                    "current": True,
+                    "id": 1,
+                    "name": "推荐",
+                    "style": 1,
+                    "has_rank": 1,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 1, "type": "1"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 4,
+                    "name": "福利姬",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 4, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 10,
+                    "name": "乱伦禁爱",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 10, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 3,
+                    "name": "网黄嫩模",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 3, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 2,
+                    "name": "原创传媒",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 2, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 6,
+                    "name": "国产直播",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 6, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 9,
+                    "name": "制服诱惑",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 9, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 8,
+                    "name": "异国风情",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 8, "sort": "new"},
+                    "h5_url": ""
+                }
+            ]
+
+            if not data:
                 return
+            if not isinstance(data, list):
+                return
+            
             # 先构建大分类配置（保持原有过滤规则）
             for item in data:
                 api = item.get('api') or ''
