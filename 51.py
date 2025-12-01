@@ -1,1 +1,805 @@
+import colorsys
+import json
+import random
+import re
+import sys
+import threading
+import time
+import requests
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad, pad
+from base64 import b64decode, b64encode
+from urllib.parse import urlparse, quote, unquote
+import base64
+import hashlib
+import os
+import uuid
+import urllib.parse
+sys.path.append('..')
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from base.spider import Spider
 
+
+class HttpParamEncryptor:
+    """HTTP参数加密工具类"""
+
+    def __init__(self):
+        # AES配置
+        self.aes_key = "NQYT3eSsXG52WPDS".encode('utf-8')
+        self.aes_iv = "e89225cfbbimgkcu".encode('utf-8')
+
+    def aes_encrypt(self, plain_text):
+        """AES加密"""
+        try:
+            plain_bytes = plain_text.encode('utf-8')
+            cipher = AES.new(self.aes_key, AES.MODE_CBC, self.aes_iv)
+            padded_bytes = pad(plain_bytes, AES.block_size)
+            encrypted_bytes = cipher.encrypt(padded_bytes)
+            encrypted_b64 = base64.b64encode(encrypted_bytes).decode('utf-8')
+            return encrypted_b64
+        except Exception as e:
+            print(f"AES加密失败: {e}")
+            return ""
+
+    def aes_decrypt(self, encrypted_b64):
+        """AES解密 - 用于解密API响应"""
+        try:
+            encrypted_bytes = base64.b64decode(encrypted_b64)
+            cipher = AES.new(self.aes_key, AES.MODE_CBC, self.aes_iv)
+            decrypted_bytes = cipher.decrypt(encrypted_bytes)
+            decrypted_bytes = unpad(decrypted_bytes, AES.block_size)
+            result = decrypted_bytes.decode('utf-8')
+            return result
+        except Exception as e:
+            print(f"❌ 解密失败: {e}")
+            return None
+
+    def generate_sign(self, encrypted_data, timestamp):
+        """生成签名 - 先SHA256再MD5"""
+        try:
+            sign_str = f"data={encrypted_data}&timestamp={timestamp}NQYT3eSsXG52WPDS"
+            sha256_hex = hashlib.sha256(sign_str.encode('utf-8')).hexdigest()
+            md5_hex = hashlib.md5(sha256_hex.encode('utf-8')).hexdigest()
+            return md5_hex
+        except Exception as e:
+            print(f"签名生成失败: {e}")
+            return ""
+
+    def encrypt_params(self, params_dict):
+        """完整参数加密流程"""
+        try:
+            timestamp = int(time.time() * 1000)
+            params_json = json.dumps(
+                params_dict, ensure_ascii=False, separators=(',', ':'))
+            encrypted_data = self.aes_encrypt(params_json)
+
+            if not encrypted_data:
+                return ""
+
+            sign = self.generate_sign(encrypted_data, timestamp)
+            encoded_data = urllib.parse.quote(encrypted_data, safe='')
+
+            payload_dict = {
+                "timestamp": str(timestamp),
+                "data": encoded_data,
+                "sign": sign
+            }
+
+            payload = f"timestamp={payload_dict['timestamp']}&data={payload_dict['data']}&sign={payload_dict['sign']}"
+            return payload
+
+        except Exception as e:
+            print(f"参数加密失败: {e}")
+            return ""
+
+    def generate_device_id(self):
+        """生成设备ID - 模拟Java代码的算法"""
+        try:
+            # 1. 生成UUID并去除短横线 (对应Java: UUID.randomUUID().toString().replace("-", ""))
+            raw_uuid = str(uuid.uuid4()).replace("-", "")
+            print(f"原始UUID: {raw_uuid}")
+
+            # 2. SHA-256哈希 (对应Java: C5006x.m14370d)
+            sha256_hash = hashlib.sha256(raw_uuid.encode('utf-8')).hexdigest()
+            print(f"SHA-256哈希: {sha256_hash}")
+
+            # 3. MD5哈希 (对应Java: C4995t0.m14297a)
+            md5_hash = hashlib.md5(sha256_hash.encode('utf-8')).hexdigest()
+            print(f"最终设备ID (MD5): {md5_hash}")
+
+            return md5_hash
+
+        except Exception as e:
+            print(f"设备ID生成失败: {e}")
+            # 降级方案：直接生成MD5
+            fallback = hashlib.md5(
+                str(time.time()).encode('utf-8')).hexdigest()
+            return fallback
+
+
+class Spider(Spider):
+
+    saved_oauth_id = None
+
+    def init(self, extend="{}"):
+
+        self.domin = 'https://sapi01.eihpijd.xyz'
+        self.proxies = {
+            'http': 'http://127.0.0.1:9978',
+            'https': 'http://127.0.0.1:9978'
+        }
+        # 请求头
+        self.headers = {
+            'User-Agent': "okhttp-okgo/jeasonlzy",
+            'Accept-Encoding': "gzip",
+            'Content-Type': "application/x-www-form-urlencoded",
+            'accept-language': "zh-CN,zh;q=0.8"
+        }
+        self.encryptor = HttpParamEncryptor()
+
+        # API配置
+        random_seed = f"{time.time()}-{random.random()}"
+        if Spider.saved_oauth_id:
+            dynamic_oauth_id = Spider.saved_oauth_id
+        else:
+            dynamic_oauth_id = self.encryptor.generate_device_id()
+            Spider.saved_oauth_id = dynamic_oauth_id
+        self.base_params = {
+            "bundle_id": "me.utzvd.hyngcj",
+            "oauth_type": "android",
+            "oauth_id": dynamic_oauth_id,
+            "version": "4.2.0",
+            "build_affcode": "gw",
+            "token": ""
+        }
+
+        try:
+            config_params = {
+                "theme": ""
+            }
+            self.make_api_request('/api.php/api/home/getconfig', config_params)
+        except Exception:
+            pass
+
+        self.category_config = {}
+        self.load_categories()
+
+    def getName(self):
+        return "51吸瓜API版"
+
+    def isVideoFormat(self, url):
+        return True
+
+    def manualVideoCheck(self):
+        return False
+
+    def destroy(self):
+        pass
+
+    def homeContent(self, filter):
+        """首页内容 - 使用API获取"""
+        result = {}
+        
+        print(f"🔍 调试信息: 开始加载首页内容")
+        print(f"🔍 分类配置数量: {len(self.category_config)}")
+        
+        # 获取分类
+        classes = self.get_categories()
+        print(f"🔍 获取到的分类数量: {len(classes)}")
+        
+        # 设置过滤器
+        filters = {}
+        for tid, cfg in self.category_config.items():
+            series = cfg.get('series') or []
+            if series:
+                options = [{'n': '全部', 'v': ''}]
+                for s in series:
+                    options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
+                filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+        
+        # 选择默认分类
+        default_tid = None
+        for tid, cfg in self.category_config.items():
+            if cfg.get('name') == '推荐':
+                default_tid = tid
+                break
+        
+        # 如果没有推荐分类，选择第一个可用的分类
+        if not default_tid and self.category_config:
+            default_tid = list(self.category_config.keys())[0]
+        
+        print(f"🔍 选择的默认分类ID: {default_tid}")
+        
+        videos = []
+        if default_tid:
+            cfg = self.category_config.get(default_tid, {})
+            print(f"🔍 默认分类配置: {cfg}")
+            
+            api_path = cfg.get('api') or '/api.php/api/navigation/theme'
+            params = cfg.get('params', {}).copy()
+            params.setdefault('theme', '')
+            params.setdefault('page', '1')
+            
+            print(f"🔍 请求API: {api_path}")
+            print(f"🔍 请求参数: {params}")
+            
+            videos = self.get_video_list(page="1", params=params, api_path=api_path)
+            print(f"🔍 获取到的视频数量: {len(videos)}")
+        else:
+            print("❌ 错误: 没有找到可用的默认分类")
+        
+        result['class'] = classes
+        if filters:
+            result['filters'] = filters
+        result['list'] = videos
+        
+        print(f"✅ 首页内容加载完成: {len(classes)}个分类, {len(videos)}个视频")
+        return result
+    def homeVideoContent(self):
+        """首页视频内容（给部分壳子用）"""
+        # 复用 homeContent 的默认分类逻辑，只返回视频列表部分
+        try:
+            data = self.homeContent(False)
+            return data.get('list', []) if isinstance(data, dict) else []
+        except Exception:
+            return []
+
+    def categoryContent(self, tid, pg, filter, extend):
+        """分类内容"""
+        result = {}
+
+        tid = str(tid)
+        cfg = self.category_config.get(tid)
+        if not cfg:
+            result['list'] = []
+            result['page'] = pg
+            result['pagecount'] = 1
+            result['limit'] = 90
+            result['total'] = 0
+            return result
+        series_id = None
+        sort = None
+        if extend:
+            series_id = extend.get('series_id') or extend.get('id')
+            sort = extend.get('sort')
+        api_path = cfg.get('api') or '/api.php/api/navigation/theme'
+        if series_id:
+            api_path = '/api.php/api/navigation/seriesMvList'
+            params = {
+                'theme': '',
+                'page': str(pg),
+                'id': str(series_id)
+            }
+            if sort:
+                params['sort'] = sort
+        else:
+            params = cfg.get('params', {}).copy()
+            params['page'] = str(pg)
+            params.setdefault('theme', '')
+        videos = self.get_video_list(
+            page=str(pg), params=params, api_path=api_path)
+
+        result['list'] = videos
+        result['page'] = pg
+        result['pagecount'] = 99999
+        result['limit'] = 90
+        result['total'] = 999999
+        return result
+
+    def detailContent(self, ids):
+        """详情内容"""
+        video_id = ids[0]
+
+        params = {
+            "theme": "",
+            "id": video_id
+        }
+        response_data = self.make_api_request('/api.php/api/mv/detail', params)
+        if not response_data:
+            return {'list': []}
+
+        row = response_data.get('row', {}) if isinstance(
+            response_data, dict) else {}
+        vod = self.parse_video_detail(row, video_id)
+        return {'list': [vod]}
+
+    def searchContent(self, key, quick, pg="1"):
+        """搜索内容"""
+        params = {
+            "page": str(pg),
+            "theme": key
+        }
+        videos = self.get_video_list(page=str(pg), params=params)
+        return {'list': videos, 'page': pg}
+
+    def playerContent(self, flag, id, vipFlags):
+        """播放内容"""
+        # 解析播放地址
+        if '_dm_' in id:
+            did, pid = id.split('_dm_')
+        else:
+            did, pid = id, id
+
+        p = 0 if re.search(r'\.(m3u8|mp4|flv|ts|mkv|mov|avi|webm)', pid) else 1
+
+        if not p:
+            pid = f"{self.getProxyUrl()}&pdid={quote(id)}&type=m3u8"
+
+        return {'parse': p, 'url': pid, 'header': self.headers}
+
+    def localProxy(self, param):
+        """本地代理处理"""
+        try:
+            xtype = param.get('type', '')
+            if 'm3u8' in xtype:
+                path, url = unquote(param['pdid']).split('_dm_')
+                data = requests.get(url, headers=self.headers,
+                                    proxies=self.proxies, timeout=10).text
+                lines = data.strip().split('\n')
+                times = 0.0
+                for i in lines:
+                    if i.startswith('#EXTINF:'):
+                        times += float(i.split(':')[-1].replace(',', ''))
+                thread = threading.Thread(
+                    target=self.some_background_task, args=(path, int(times)))
+                thread.start()
+                return [200, 'text/plain', data]
+            elif 'xdm' in xtype:
+                url = f"{self.host}{unquote(param['path'])}"
+                res = requests.get(url, headers=self.headers,
+                                   proxies=self.proxies, timeout=10).json()
+                dms = []
+                for k in res:
+                    text = k.get('text')
+                    children = k.get('children')
+                    if text:
+                        dms.append(text.strip())
+                    if children:
+                        for j in children:
+                            ctext = j.get('text')
+                            if ctext:
+                                ctext = ctext.strip()
+                                if "@" in ctext:
+                                    dms.append(ctext.split(' ', 1)[-1].strip())
+                                else:
+                                    dms.append(ctext)
+                return self.xml(dms, int(param['times']))
+
+            # 图片解密处理
+            url = self.d64(param['url'])
+            match = re.search(r"loadBannerDirect\('([^']*)'", url)
+            if match:
+                url = match.group(1)
+            res = requests.get(url, headers=self.headers,
+                               proxies=self.proxies, timeout=10)
+            return [200, res.headers.get('Content-Type'), self.aesimg(res.content)]
+
+        except Exception as e:
+            print(f"代理处理错误: {e}")
+            return [500, 'text/html', '']
+
+    def make_api_request(self, api_path, params):
+        """发送API请求"""
+        try:
+            all_params = self.base_params.copy()
+            if params:
+                all_params.update(params)
+            payload = self.encryptor.encrypt_params(all_params)
+            if not payload:
+                return None
+            url = self.domin + api_path
+            # 对齐单独测试脚本：为每个接口设置 document-url 头
+            self.headers['document-url'] = api_path
+            response = requests.post(
+                url,
+                data=payload,
+                headers=self.headers,
+                timeout=10,
+                verify=False
+            )
+            if response.status_code != 200:
+                print(f"API请求失败，状态码: {response.status_code}")
+                return None
+            response_data = response.json()
+            errcode = response_data.get("errcode", -1)
+            if errcode != 0:
+                print(f"API返回错误: errcode={errcode}")
+                return None
+            encrypted_data = response_data.get("data", "")
+            if encrypted_data:
+                decrypted_data = self.encryptor.aes_decrypt(encrypted_data)
+                if decrypted_data:
+                    try:
+                        return json.loads(decrypted_data)
+                    except:
+                        return decrypted_data
+            return None
+        except Exception as e:
+            print(f"API请求异常: {e}")
+            return None
+
+    def get_video_list(self, page="1", params=None, api_path=None):
+        """获取视频列表"""
+        if api_path is None:
+            api_path = '/api.php/api/navigation/theme'
+        extra_params = {}
+        if params is not None:
+            extra_params.update(params)
+        else:
+            extra_params['page'] = page
+            extra_params['theme'] = ''
+        response_data = self.make_api_request(api_path, extra_params)
+        if not response_data:
+            return []
+        # theme 接口的新结构: { data: { list: [ {id,title,list:[video...]} ] } }
+        if isinstance(response_data, dict) and api_path.endswith('/navigation/theme'):
+            items = []
+            data_block = response_data.get('data') or {}
+            # 优先使用 data.list 结构
+            blocks = data_block.get('list') or response_data.get('list') or []
+            for block in blocks:
+                if not isinstance(block, dict):
+                    continue
+                sub_list = block.get('list') or []
+                if isinstance(sub_list, list):
+                    items.extend(sub_list)
+            return self.parse_video_list(items)
+        return self.parse_video_list(response_data)
+
+    def parse_video_list(self, data):
+        """解析视频列表数据"""
+        videos = []
+        if isinstance(data, list):
+            video_list = data
+        elif isinstance(data, dict):
+            video_list = data.get('videos', []) or data.get(
+                'list', []) or data.get('data', [])
+        else:
+            video_list = []
+        for item in video_list:
+            if isinstance(item, dict):
+                raw_pic = item.get('cover_thumb_url', '') or item.get('thumb', '')
+                vod_pic = ''
+                if raw_pic:
+                    try:
+                        encoded_url = self.e64(raw_pic)
+                        vod_pic = f"{self.getProxyUrl()}&url={encoded_url}"
+                    except Exception:
+                        vod_pic = raw_pic
+                
+                video = {
+                    'vod_id': str(item.get('id', '')),
+                    'vod_name': item.get('title', '未知标题'),
+                    'vod_pic': vod_pic,
+                    'vod_remarks': item.get('duration_str', '') or item.get('created_str', ''),
+                    'vod_tag': item.get('tags', ''),
+                    'style': {"type": "rect", "ratio": 2.3}
+                }
+                video = {k: v for k, v in video.items() if v}
+                if video.get('vod_id') and video.get('vod_name'):
+                    videos.append(video)
+        return videos
+
+    def load_categories(self):
+        """加载导航大分类及其系列小分类（使用本地写死的数据，不再请求 navigation/index 接口）"""
+        try:
+            # 直接使用拦截到的 /api.php/api/navigation/index 解密数据，避免每次发起请求
+            data = [
+                {
+                    "current": False,
+                    "id": -1,
+                    "name": "关注",
+                    "style": 0,
+                    "has_rank": 0,
+                    "api": "/api/navigation/list_follows",
+                    "params": {"type": "1"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": -1,
+                    "name": "精选",
+                    "style": 10,
+                    "has_rank": 0,
+                    "api": "/api/navigation/list_short_mv",
+                    "params": {"type": "1"},
+                    "h5_url": ""
+                },
+                {
+                    "current": True,
+                    "id": 1,
+                    "name": "推荐",
+                    "style": 1,
+                    "has_rank": 1,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 1, "type": "1"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 16,
+                    "name": "17岁",
+                    "style": 3,
+                    "has_rank": 0,
+                    "api": "",
+                    "params": {"id": 16},
+                    "h5_url": "https://865.nzcnxez.xyz/index.php?m=index&a=seventeen&token=bhnHK-9905"
+                },
+                {
+                    "current": False,
+                    "id": -1,
+                    "name": "发现",
+                    "style": 2,
+                    "has_rank": 0,
+                    "api": "/api/navigation/found",
+                    "params": {"type": "1"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 4,
+                    "name": "福利姬",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 4, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 7,
+                    "name": "动漫次元",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 7, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 10,
+                    "name": "乱伦禁爱",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 10, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 3,
+                    "name": "网黄嫩模",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 3, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 2,
+                    "name": "原创传媒",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 2, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 6,
+                    "name": "国产直播",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 6, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 9,
+                    "name": "制服诱惑",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 9, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 5,
+                    "name": "日本AV",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 5, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 8,
+                    "name": "异国风情",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 8, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 16,
+                    "name": "17岁",
+                    "style": 3,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 16, "sort": "new"},
+                    "h5_url": ""
+                }
+            ]
+
+            if not data:
+                return
+            if not isinstance(data, list):
+                return
+            # 先构建大分类配置（保持原有过滤规则）
+            for item in data:
+                api = item.get('api') or ''
+                if not api:
+                    continue
+                # 过滤不需要的入口
+                if api in ['/api/navigation/found', '/api/navigation/list_follows']:
+                    continue
+                if item.get('h5_url'):
+                    continue
+                raw_id = item.get('id', -1)
+                if raw_id == -1:
+                    tid = f"api_{api}"
+                else:
+                    tid = str(raw_id)
+                api_path = api
+                if api_path.startswith('/api/'):
+                    api_path = '/api.php' + api_path
+                cfg = {
+                    'name': item.get('name', ''),
+                    'api': api_path,
+                    'params': item.get('params', {}) or {}
+                }
+                self.category_config[tid] = cfg
+            # 再为 theme 类分类加载系列小分类
+            for tid, cfg in list(self.category_config.items()):
+                api_path = cfg.get('api') or ''
+                params = cfg.get('params', {}).copy()
+                if api_path.endswith('/navigation/theme') and params.get('id'):
+                    params.setdefault('theme', '')
+                    params.setdefault('page', '1')
+                    theme_data = self.make_api_request(api_path, params)
+                    series = []
+                    if isinstance(theme_data, dict):
+                        for block in theme_data.get('list', []):
+                            sid = block.get('id')
+                            title = block.get('title')
+                            if sid and title:
+                                series.append({'id': sid, 'name': title})
+                    cfg['series'] = series
+        except Exception as e:
+            print(f"加载分类失败: {e}")
+
+    def get_categories(self):
+        """根据已加载的导航生成分类列表"""
+        categories = []
+        for tid, cfg in self.category_config.items():
+            name = cfg.get('name')
+            if not name:
+                continue
+            categories.append({
+                'type_id': tid,
+                'type_name': name
+            })
+        return categories
+
+    def parse_video_detail(self, data, video_id):
+        """解析视频详情"""
+        raw_pic = data.get('cover_thumb_url', '') or data.get('thumb', '')
+        vod_pic = ''
+        if raw_pic:
+            try:
+                encoded_url = self.e64(raw_pic)
+                vod_pic = f"{self.getProxyUrl()}&url={encoded_url}"
+            except Exception:
+                vod_pic = raw_pic
+        
+        vod = {
+            'vod_id': video_id,
+            'vod_name': data.get('title', '未知标题'),
+            'vod_pic': vod_pic,
+            'vod_content': data.get('description', '') or data.get('actors', ''),
+            'vod_play_from': '51吸瓜',
+            'vod_play_url': ''
+        }
+        play_url = data.get('play_url', '')
+        if play_url:
+            vod['vod_play_url'] = f"正片${video_id}_dm_{play_url}"
+        episodes = data.get('episodes', [])
+        if episodes:
+            play_list = []
+            for idx, episode in enumerate(episodes, 1):
+                episode_url = episode.get('url', '')
+                if episode_url:
+                    play_list.append(f"第{idx}集${video_id}_dm_{episode_url}")
+            if play_list:
+                vod['vod_play_url'] = '#'.join(play_list)
+        return vod
+
+    # 保留原有的工具方法
+    def some_background_task(self, path, times):
+        try:
+            time.sleep(1)
+            purl = f"{self.getProxyUrl()}&path={quote(path)}&times={times}&type=xdm"
+            self.fetch(
+                f"http://127.0.0.1:9978/action?do=refresh&type=danmaku&path={quote(purl)}")
+        except Exception as e:
+            print(e)
+
+    def xml(self, dms, times):
+        try:
+            tsrt = f'共有{len(dms)}条弹幕来袭！！！'
+            danmustr = f'<?xml version="1.0" encoding="UTF-8"?>\n<i>\n\t<chatserver>chat.xtdm.com</chatserver>\n\t<chatid>88888888</chatid>\n\t<mission>0</mission>\n\t<maxlimit>99999</maxlimit>\n\t<state>0</state>\n\t<real_name>0</real_name>\n\t<source>k-v</source>\n'
+            danmustr += f'\t<d p="0,5,25,16711680,0">{tsrt}</d>\n'
+            for i in range(len(dms)):
+                base_time = (i / len(dms)) * times
+                dm0 = base_time + random.uniform(-3, 3)
+                dm0 = round(max(0, min(dm0, times)), 1)
+                dm2 = self.get_color()
+                dm4 = re.sub(r'[<>&\u0000\b]', '', dms[i])
+                tempdata = f'\t<d p="{dm0},1,25,{dm2},0">{dm4}</d>\n'
+                danmustr += tempdata
+            danmustr += '</i>'
+            return [200, "text/xml", danmustr]
+        except Exception as e:
+            print(e)
+            return [500, 'text/html', '']
+
+    def get_color(self):
+        if random.random() < 0.1:
+            h = random.random()
+            s = random.uniform(0.7, 1.0)
+            v = random.uniform(0.8, 1.0)
+            r, g, b = colorsys.hsv_to_rgb(h, s, v)
+            r = int(r * 255)
+            g = int(g * 255)
+            b = int(b * 255)
+            decimal_color = (r << 16) + (g << 8) + b
+            return str(decimal_color)
+        else:
+            return '16777215'
+
+    def e64(self, text):
+        try:
+            text_bytes = text.encode('utf-8')
+            encoded_bytes = b64encode(text_bytes)
+            return encoded_bytes.decode('utf-8')
+        except Exception as e:
+            print(f"Base64编码错误: {str(e)}")
+            return ""
+
+    def d64(self, encoded_text):
+        try:
+            encoded_bytes = encoded_text.encode('utf-8')
+            decoded_bytes = b64decode(encoded_bytes)
+            return decoded_bytes.decode('utf-8')
+        except Exception as e:
+            print(f"Base64解码错误: {str(e)}")
+            return ""
+
+    def aesimg(self, word):
+        """图片AES解密"""
+        try:
+            key = b'f5d965df75336270'
+            iv = b'97b60394abc2fbe1'
+            cipher = AES.new(key, AES.MODE_CBC, iv)
+            decrypted = unpad(cipher.decrypt(word), AES.block_size)
+            return decrypted
+        except Exception as e:
+            print(f"图片AES解密失败: {e}")
+            # 如果解密失败，返回原始数据
+            return word
