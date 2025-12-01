@@ -333,25 +333,6 @@ class Spider(Spider):
                 videos = self.get_video_list(page="1", params=params, api_path=api_path)
                 print(f"🔍 获取到的视频数量: {len(videos)}")
             except Exception as e:
-                print(f"❌ 获取视频列表失败: {e}")
-                videos = []
-        else:
-            print("❌ 错误: 没有找到可用的默认分类")
-        
-        result['class'] = classes
-        result['list'] = videos
-        
-        # 首页返回所有分类的过滤器
-        if all_filters:
-            result['filters'] = all_filters
-            print(f"首页返回所有分类过滤器，共 {len(all_filters)} 个分类")
-        
-        print(f"首页内容加载完成: {len(classes)}个分类, {len(videos)}个视频")
-        return result
-
-    def homeVideoContent(self):
-        """首页视频内容（给部分壳子用）"""
-        # 复用 homeContent 的默认分类逻辑，只返回视频列表部分
         pass
 
     def categoryContent(self, tid, pg, filter, extend):
@@ -425,8 +406,14 @@ class Spider(Spider):
         result['pagecount'] = 99999
         result['limit'] = 90
         result['total'] = 999999
-        # categoryContent 不返回过滤器，过滤器只在 homeContent 中返回
-        print(f"🔍 categoryContent最终返回: list={len(videos)}, 不返回过滤器")
+        # 动态返回过滤器，让前端能够显示过滤选项
+        if filters:
+            result['filters'] = filters
+            print(f"🔍 返回过滤器数据: {filters}")
+        else:
+            print(f"🔍 没有过滤器数据返回")
+        
+        print(f"🔍 categoryContent最终返回: list={len(videos)}, filters={bool(filters)}")
         return result
 
     def detailContent(self, ids):
@@ -870,12 +857,30 @@ class Spider(Spider):
                     "api": "/api/navigation/theme",
                     "params": {"id": 8, "sort": "new"},
                     "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 13,
+                    "name": "小马拉大车",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 13, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 14,
+                    "name": "强奸",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 14, "sort": "new"},
+                    "h5_url": ""
                 }
             ]
 
             if not data:
-                return
-            if not isinstance(data, list):
                 return
             
             # 先构建大分类配置（保持原有过滤规则）
@@ -917,26 +922,14 @@ class Spider(Spider):
         """根据已加载的导航生成分类列表"""
         self._ensure_categories_loaded()
         categories = []
-        
-        # 按照硬编码的顺序返回分类，确保显示顺序正确
-        category_order = ['1', '4', '10', '3', '2', '6', '9', '8']
-        
-        for tid in category_order:
-            cfg = self.category_config.get(tid)
-            if cfg:
-                name = cfg.get('name')
-                if name:
-                    categories.append({
-                        'type_id': tid,
-                        'type_name': name
-                    })
-                    print(f"🔍 添加分类: {name} (ID: {tid})")
-                else:
-                    print(f"🔍 跳过分类 ID {tid}，名称为空")
-            else:
-                print(f"🔍 跳过分类 ID {tid}，配置不存在")
-        
-        print(f"🔍 最终分类列表: {[cat['type_name'] for cat in categories]}")
+        for tid, cfg in self.category_config.items():
+            name = cfg.get('name')
+            if not name:
+                continue
+            categories.append({
+                'type_id': tid,
+                'type_name': name
+            })
         return categories
 
     def parse_video_detail(self, data, video_id):
