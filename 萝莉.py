@@ -229,6 +229,25 @@ class Spider(Spider):
                 cfg = self.category_config.get(default_tid, {})
                 print(f"🔍 默认分类配置: {cfg}")
                 
+                # 首页加载时同时获取系列数据
+                if cfg.get('api', '').endswith('/navigation/theme') and not cfg.get('series'):
+                    print(f"🔍 首页预加载默认分类的系列数据...")
+                    api_path = cfg.get('api') or ''
+                    params = cfg.get('params', {}).copy()
+                    params.setdefault('theme', '')
+                    params.setdefault('page', '1')
+                    theme_data = self.make_api_request(api_path, params)
+                    series = []
+                    if isinstance(theme_data, dict):
+                        list_data = theme_data.get('list', [])
+                        for block in list_data:
+                            sid = block.get('id')
+                            title = block.get('title')
+                            if sid and title:
+                                series.append({'id': sid, 'name': title})
+                    cfg['series'] = series
+                    print(f"🔍 默认分类预加载了 {len(series)} 个系列")
+                
                 api_path = cfg.get('api') or '/api.php/api/navigation/theme'
                 params = cfg.get('params', {}).copy()
                 params.setdefault('theme', '')
