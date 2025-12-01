@@ -425,8 +425,14 @@ class Spider(Spider):
         result['pagecount'] = 99999
         result['limit'] = 90
         result['total'] = 999999
-        # categoryContent 不返回过滤器，过滤器只在 homeContent 中返回
-        print(f"🔍 categoryContent最终返回: list={len(videos)}, 不返回过滤器")
+        # 动态返回过滤器，让前端能够显示过滤选项
+        if filters:
+            result['filters'] = filters
+            print(f"🔍 categoryContent返回过滤器: {filters}")
+        else:
+            print(f"🔍 categoryContent没有过滤器数据")
+        
+        print(f"🔍 categoryContent最终返回: list={len(videos)}, filters={bool(filters)}")
         return result
 
     def detailContent(self, ids):
@@ -873,21 +879,21 @@ class Spider(Spider):
                 },{
                     "current": False,
                     "id": 13,
-                    "name": "小强",
+                    "name": "小马拉大车",
                     "style": 1,
                     "has_rank": 0,
                     "api": "/api/navigation/theme",
-                    "params": {"id": 14, "sort": "new"},
+                    "params": {"id": 5, "sort": "new"},
                     "h5_url": ""
                 },
                 {
                     "current": False,
-                    "id": 13,
-                    "name": "小马",
+                    "id": 14,
+                    "name": "强奸",
                     "style": 1,
                     "has_rank": 0,
                     "api": "/api/navigation/theme",
-                    "params": {"id": 13, "sort": "new"},
+                    "params": {"id": 7, "sort": "new"},
                     "h5_url": ""
                 }
 
