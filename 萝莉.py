@@ -191,41 +191,9 @@ class Spider(Spider):
         classes = self.get_categories()
         print(f"🔍 获取到的分类数量: {len(classes)}")
         
-        # 首页需要设置所有分类的过滤器配置（按TVBox规范）
+        # 首页不预加载过滤器，采用动态加载策略
         filters = {}
-        print(f"🔍 开始为所有分类设置过滤器配置...")
-        
-        # 为所有使用 theme 接口的分类预加载系列数据并设置过滤器
-        for tid, cfg in self.category_config.items():
-            api_path = cfg.get('api') or ''
-            if api_path.endswith('/navigation/theme'):
-                print(f"🔍 为分类 {cfg.get('name')} (tid={tid}) 预加载系列数据...")
-                params = cfg.get('params', {}).copy()
-                params.setdefault('theme', '')
-                params.setdefault('page', '1')
-                theme_data = self.make_api_request(api_path, params)
-                series = []
-                if isinstance(theme_data, dict):
-                    for block in theme_data.get('list', []):
-                        sid = block.get('id')
-                        title = block.get('title')
-                        if sid and title:
-                            series.append({'id': sid, 'name': title})
-                cfg['series'] = series
-                print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
-                
-                # 为该分类设置过滤器
-                if series:
-                    options = [{'n': '全部', 'v': ''}]
-                    for s in series:
-                        options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
-                    filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
-                    print(f"🔍 为分类 {cfg.get('name')} 设置了过滤器，选项数量: {len(options)}")
-            else:
-                # 其他接口类型的分类使用空系列
-                cfg['series'] = []
-        
-        print(f"🔍 过滤器配置完成，共设置 {len(filters)} 个分类的过滤器")
+        print(f"🔍 首页不预加载过滤器，采用动态加载策略")
         
         # 选择默认分类
         default_tid = None
@@ -239,6 +207,37 @@ class Spider(Spider):
             default_tid = list(self.category_config.keys())[0]
         
         print(f"🔍 选择的默认分类ID: {default_tid}")
+        
+        # 为默认分类预加载系列数据和过滤器（确保首页有过滤功能）
+        if default_tid:
+            cfg = self.category_config.get(default_tid, {})
+            series = cfg.get('series') or []
+            if not series and cfg.get('api', '').endswith('/navigation/theme'):
+                print(f"🔍 为默认分类 {cfg.get('name')} 预加载系列数据...")
+                api_path = cfg.get('api') or ''
+                params = cfg.get('params', {}).copy()
+                params.setdefault('theme', '')
+                params.setdefault('page', '1')
+                theme_data = self.make_api_request(api_path, params)
+                series = []
+                if isinstance(theme_data, dict):
+                    for block in theme_data.get('list', []):
+                        sid = block.get('id')
+                        title = block.get('title')
+                        if sid and title:
+                            series.append({'id': sid, 'name': title})
+                cfg['series'] = series
+                print(f"🔍 默认分类加载了 {len(series)} 个系列")
+            
+            # 为默认分类设置过滤器
+            if series:
+                options = [{'n': '全部', 'v': ''}]
+                for s in series:
+                    options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
+                filters[default_tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+                print(f"🔍 为默认分类 {cfg.get('name')} 设置了过滤器，选项数量: {len(options)}")
+        
+        print(f"🔍 首页过滤器设置完成，只为默认分类设置了过滤器")
         
         videos = []
         if default_tid:
