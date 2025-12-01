@@ -303,6 +303,8 @@ class Spider(Spider):
             params = cfg.get('params', {}).copy()
             params['page'] = str(pg)
             params.setdefault('theme', '')
+            # 默认设置为最新排序
+            params.setdefault('sort', 'new')
         videos = self.get_video_list(
             page=str(pg), params=params, api_path=api_path)
 
