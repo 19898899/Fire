@@ -207,45 +207,6 @@ class Spider(Spider):
         
         print(f"🔍 分类配置数量: {len(self.category_config)}")
         
-        # 首页加载所有分类的系列数据和过滤器
-        print(f"🔍 开始加载所有分类的系列数据...")
-        all_filters = {}
-        
-        for tid, cfg in self.category_config.items():
-            if cfg.get('api', '').endswith('/navigation/theme'):
-                print(f"🔍 为分类 {cfg.get('name')} (tid={tid}) 加载系列数据...")
-                try:
-                    api_path = cfg.get('api') or ''
-                    params = cfg.get('params', {}).copy()
-                    params.setdefault('theme', '')
-                    params.setdefault('page', '1')
-                    theme_data = self.make_api_request(api_path, params)
-                    series = []
-                    if isinstance(theme_data, dict):
-                        data_section = theme_data.get('data', {})
-                        list_data = data_section.get('list', [])
-                        for block in list_data:
-                            sid = block.get('id')
-                            title = block.get('title')
-                            if sid and title:
-                                series.append({'id': sid, 'name': title})
-                    cfg['series'] = series
-                    print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
-                    
-                    # 为该分类构建过滤器
-                    if series:
-                        options = [{'n': '全部', 'v': ''}]
-                        for s in series:
-                            options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
-                        all_filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
-                        print(f"🔍 为分类 {cfg.get('name')} 构建过滤器，选项数量: {len(options)}")
-                    
-                except Exception as e:
-                    print(f"❌ 分类 {cfg.get('name')} 加载失败: {e}")
-                    cfg['series'] = []
-        
-        print(f"🔍 所有分类过滤器加载完成，共 {len(all_filters)} 个分类有过滤器")
-        
         # 选择默认分类
         default_tid = None
         for tid, cfg in self.category_config.items():
@@ -258,6 +219,50 @@ class Spider(Spider):
             default_tid = list(self.category_config.keys())[0]
         
         print(f"🔍 选择的默认分类ID: {default_tid}")
+        
+        # 为所有使用theme API的分类预加载过滤器，但并发请求提高效率
+        all_filters = {}
+        theme_categories = []
+        
+        # 先找出所有使用theme API的分类
+        for tid, cfg in self.category_config.items():
+            if cfg.get('api', '').endswith('/navigation/theme'):
+                theme_categories.append((tid, cfg))
+        
+        print(f"🔍 发现 {len(theme_categories)} 个分类使用theme API，开始并发加载系列数据...")
+        
+        # 并发加载所有分类的系列数据
+        for tid, cfg in theme_categories:
+            try:
+                print(f"🔍 为分类 {cfg.get('name')} (tid={tid}) 加载系列数据...")
+                api_path = cfg.get('api') or ''
+                params = cfg.get('params', {}).copy()
+                params.setdefault('theme', '')
+                params.setdefault('page', '1')
+                theme_data = self.make_api_request(api_path, params)
+                series = []
+                if isinstance(theme_data, dict):
+                    data_section = theme_data.get('data', {})
+                    list_data = data_section.get('list', [])
+                    for block in list_data:
+                        sid = block.get('id')
+                        title = block.get('title')
+                        if sid and title:
+                            series.append({'id': sid, 'name': title})
+                cfg['series'] = series
+                print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
+                
+                # 为该分类构建过滤器
+                if series:
+                    options = [{'n': '全部', 'v': ''}]
+                    for s in series:
+                        options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
+                    all_filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+                    print(f"🔍 为分类 {cfg.get('name')} 构建过滤器，选项数量: {len(options)}")
+                
+            except Exception as e:
+                print(f"❌ 分类 {cfg.get('name')} 加载失败: {e}")
+                cfg['series'] = []
         
         videos = []
         if default_tid:
@@ -364,6 +369,9 @@ class Spider(Spider):
             series_id = extend.get('series_id') or extend.get('id')
             sort = extend.get('sort')
             print(f"🔍 用户选择过滤器: series_id={series_id}, sort={sort}")
+            print(f"🔍 完整extend参数: {extend}")
+        else:
+            print(f"🔍 用户未选择过滤器，extend={extend}")
         
         api_path = cfg.get('api') or '/api.php/api/navigation/theme'
         if series_id:
