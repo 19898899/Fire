@@ -798,7 +798,7 @@ class Spider(Spider):
                     "style": 1,
                     "has_rank": 1,
                     "api": "/api/navigation/theme",
-                    "params": {"id": 1, "type": "1"},
+                    "params": {"id": 1, "type": "1","sort": "new"},
                     "h5_url": ""
                 },
                 {
