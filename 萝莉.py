@@ -741,12 +741,23 @@ class Spider(Spider):
             data_block = response_data.get('data') or {}
             # 优先使用 data.list 结构
             blocks = data_block.get('list') or response_data.get('list') or []
-            for block in blocks:
-                if not isinstance(block, dict):
-                    continue
-                sub_list = block.get('list') or []
-                if isinstance(sub_list, list):
-                    items.extend(sub_list)
+            
+            # 特殊处理ID 13（小马拉大车）- 检查是否直接返回视频列表
+            if extra_params.get('id') == '13' or extra_params.get('id') == 13:
+                print(f"🔍 检测到ID 13（小马拉大车）视频请求，使用特殊处理逻辑")
+                # ID 13直接返回视频列表，不需要从子列表中提取
+                items = blocks  # 直接使用blocks作为视频列表
+                print(f"🔍 ID 13 直接解析到 {len(items)} 个视频")
+            else:
+                # 其他分类使用正常的嵌套结构解析
+                for block in blocks:
+                    if not isinstance(block, dict):
+                        continue
+                    sub_list = block.get('list') or []
+                    if isinstance(sub_list, list):
+                        items.extend(sub_list)
+                print(f"🔍 其他分类解析到 {len(items)} 个视频")
+            
             return self.parse_video_list(items)
         
         # seriesMvList 接口结构: { data: { list: [video...] } } 或直接是视频列表
