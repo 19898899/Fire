@@ -152,6 +152,7 @@ class Spider(Spider):
             "oauth_id": dynamic_oauth_id,
             "version": "4.2.0",
             "build_affcode": "gw",
+            "sort":"new"
             "token": ""
         }
 
@@ -190,10 +191,9 @@ class Spider(Spider):
         classes = self.get_categories()
         print(f"🔍 获取到的分类数量: {len(classes)}")
         
-        # 首页不设置过滤器，避免加载所有系列数据
-        # 过滤器将在用户进入具体分类时按需加载
+        # 首页为默认分类设置过滤器，其他分类按需加载
         filters = {}
-        print(f"🔍 首页跳过过滤器设置，将在分类页面按需加载")
+        print(f"🔍 开始为首页默认分类设置过滤器...")
         
         # 选择默认分类
         default_tid = None
@@ -207,6 +207,37 @@ class Spider(Spider):
             default_tid = list(self.category_config.keys())[0]
         
         print(f"🔍 选择的默认分类ID: {default_tid}")
+        
+        # 为默认分类加载系列数据并设置过滤器
+        if default_tid:
+            cfg = self.category_config.get(default_tid, {})
+            series = cfg.get('series') or []
+            if not series and cfg.get('api', '').endswith('/navigation/theme'):
+                print(f"🔍 为首页默认分类 {cfg.get('name')} 按需加载系列数据...")
+                api_path = cfg.get('api') or ''
+                params = cfg.get('params', {}).copy()
+                params.setdefault('theme', '')
+                params.setdefault('page', '1')
+                theme_data = self.make_api_request(api_path, params)
+                series = []
+                if isinstance(theme_data, dict):
+                    for block in theme_data.get('list', []):
+                        sid = block.get('id')
+                        title = block.get('title')
+                        if sid and title:
+                            series.append({'id': sid, 'name': title})
+                cfg['series'] = series
+                print(f"🔍 首页默认分类加载了 {len(series)} 个系列")
+            
+            # 为默认分类设置过滤器
+            if series:
+                options = [{'n': '全部', 'v': ''}]
+                for s in series:
+                    options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
+                filters[default_tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+                print(f"🔍 为首页默认分类 {cfg.get('name')} 设置了过滤器，选项数量: {len(options)}")
+        
+        print(f"🔍 首页过滤器设置完成，过滤器数量: {len(filters)}")
         
         videos = []
         if default_tid:
