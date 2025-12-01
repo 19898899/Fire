@@ -152,7 +152,7 @@ class Spider(Spider):
             "oauth_id": dynamic_oauth_id,
             "version": "4.2.0",
             "build_affcode": "gw",
-            "sort":"new"
+            "sort":"new",
             "token": ""
         }
 
@@ -191,9 +191,41 @@ class Spider(Spider):
         classes = self.get_categories()
         print(f"🔍 获取到的分类数量: {len(classes)}")
         
-        # 首页为默认分类设置过滤器，其他分类按需加载
+        # 首页需要设置所有分类的过滤器配置（按TVBox规范）
         filters = {}
-        print(f"🔍 开始为首页默认分类设置过滤器...")
+        print(f"🔍 开始为所有分类设置过滤器配置...")
+        
+        # 为所有使用 theme 接口的分类预加载系列数据并设置过滤器
+        for tid, cfg in self.category_config.items():
+            api_path = cfg.get('api') or ''
+            if api_path.endswith('/navigation/theme'):
+                print(f"🔍 为分类 {cfg.get('name')} (tid={tid}) 预加载系列数据...")
+                params = cfg.get('params', {}).copy()
+                params.setdefault('theme', '')
+                params.setdefault('page', '1')
+                theme_data = self.make_api_request(api_path, params)
+                series = []
+                if isinstance(theme_data, dict):
+                    for block in theme_data.get('list', []):
+                        sid = block.get('id')
+                        title = block.get('title')
+                        if sid and title:
+                            series.append({'id': sid, 'name': title})
+                cfg['series'] = series
+                print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
+                
+                # 为该分类设置过滤器
+                if series:
+                    options = [{'n': '全部', 'v': ''}]
+                    for s in series:
+                        options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
+                    filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+                    print(f"🔍 为分类 {cfg.get('name')} 设置了过滤器，选项数量: {len(options)}")
+            else:
+                # 其他接口类型的分类使用空系列
+                cfg['series'] = []
+        
+        print(f"🔍 过滤器配置完成，共设置 {len(filters)} 个分类的过滤器")
         
         # 选择默认分类
         default_tid = None
@@ -207,37 +239,6 @@ class Spider(Spider):
             default_tid = list(self.category_config.keys())[0]
         
         print(f"🔍 选择的默认分类ID: {default_tid}")
-        
-        # 为默认分类加载系列数据并设置过滤器
-        if default_tid:
-            cfg = self.category_config.get(default_tid, {})
-            series = cfg.get('series') or []
-            if not series and cfg.get('api', '').endswith('/navigation/theme'):
-                print(f"🔍 为首页默认分类 {cfg.get('name')} 按需加载系列数据...")
-                api_path = cfg.get('api') or ''
-                params = cfg.get('params', {}).copy()
-                params.setdefault('theme', '')
-                params.setdefault('page', '1')
-                theme_data = self.make_api_request(api_path, params)
-                series = []
-                if isinstance(theme_data, dict):
-                    for block in theme_data.get('list', []):
-                        sid = block.get('id')
-                        title = block.get('title')
-                        if sid and title:
-                            series.append({'id': sid, 'name': title})
-                cfg['series'] = series
-                print(f"🔍 首页默认分类加载了 {len(series)} 个系列")
-            
-            # 为默认分类设置过滤器
-            if series:
-                options = [{'n': '全部', 'v': ''}]
-                for s in series:
-                    options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
-                filters[default_tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
-                print(f"🔍 为首页默认分类 {cfg.get('name')} 设置了过滤器，选项数量: {len(options)}")
-        
-        print(f"🔍 首页过滤器设置完成，过滤器数量: {len(filters)}")
         
         videos = []
         if default_tid:
@@ -287,39 +288,13 @@ class Spider(Spider):
             result['total'] = 0
             return result
         
-        # 按需加载该分类的系列数据（用于过滤器）
-        series = cfg.get('series') or []
-        if not series and cfg.get('api', '').endswith('/navigation/theme'):
-            print(f"🔍 为分类 {cfg.get('name')} 按需加载系列数据...")
-            api_path = cfg.get('api') or ''
-            params = cfg.get('params', {}).copy()
-            params.setdefault('theme', '')
-            params.setdefault('page', '1')
-            theme_data = self.make_api_request(api_path, params)
-            series = []
-            if isinstance(theme_data, dict):
-                for block in theme_data.get('list', []):
-                    sid = block.get('id')
-                    title = block.get('title')
-                    if sid and title:
-                        series.append({'id': sid, 'name': title})
-            cfg['series'] = series
-            print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
-        
-        # 设置过滤器（如果有系列数据）
-        filters = {}
-        if series:
-            options = [{'n': '全部', 'v': ''}]
-            for s in series:
-                options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
-            filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
-            print(f"🔍 为分类 {cfg.get('name')} 设置了过滤器，选项数量: {len(options)}")
-        
         series_id = None
         sort = None
         if extend:
             series_id = extend.get('series_id') or extend.get('id')
             sort = extend.get('sort')
+            print(f"🔍 用户选择过滤器: series_id={series_id}, sort={sort}")
+        
         api_path = cfg.get('api') or '/api.php/api/navigation/theme'
         if series_id:
             api_path = '/api.php/api/navigation/seriesMvList'
@@ -330,22 +305,23 @@ class Spider(Spider):
             }
             if sort:
                 params['sort'] = sort
+            print(f"🔍 使用过滤器API: {api_path}, 参数: {params}")
         else:
             params = cfg.get('params', {}).copy()
             params['page'] = str(pg)
             params.setdefault('theme', '')
             # 默认设置为最新排序
             params.setdefault('sort', 'new')
-        videos = self.get_video_list(
-            page=str(pg), params=params, api_path=api_path)
+            print(f"🔍 使用默认API: {api_path}, 参数: {params}")
+        
+        videos = self.get_video_list(page=str(pg), params=params, api_path=api_path)
 
         result['list'] = videos
         result['page'] = pg
         result['pagecount'] = 99999
         result['limit'] = 90
         result['total'] = 999999
-        if filters:
-            result['filters'] = filters
+        # 注意：categoryContent 不应该返回 filters，这是TVBox规范
         return result
 
     def detailContent(self, ids):
