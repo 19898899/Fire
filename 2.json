@@ -1,0 +1,79 @@
+{
+	"logo": "https://www.emojipic.cn/Pics/72/apple/revolving-hearts_1f49e.png",
+	"sites": [{
+			"key": "快映分类",
+			"name": "😝｜快分类 ",
+			"type": 3,
+			"api": "./快映分类.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1
+		}, {
+			"key": "山有木",
+			"name": "⏭️｜山有木 ",
+			"type": 3,
+			"api": "./山有木兮.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 0
+		},{
+			"key": "瓜子",
+			"name": "🌸｜瓜子",
+			"type": 3,
+			"api": "./瓜子.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1
+		},
+
+		{
+			"name": "嗷呜｜弹幕",
+			"key": "嗷呜弹幕",
+			"type": 3,
+			"jar": "https://9763.kstore.space/wnqiwnquidwiunddneudne/custom_spider.jar",
+			"api": "csp_GoConfigAmns",
+			"indexs": 1,
+			"searchable": 1,
+			"filterable": 0,
+			"quickSearch": 1,
+			"changeable": 0
+		},{
+			"key": "看",
+			"name": "⏭️｜好看 ",
+			"type": 3,
+			"api": "./好看.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 0
+		},
+		{
+			"key": "爱壹帆",
+			"name": "⏭️｜爱壹帆",
+			"type": 3,
+			"api": "./爱壹帆.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1
+		},
+		{
+			"key": "51",
+			"name": "🍉｜51",
+			"type": 3,
+			"api": "./51吸瓜.py",
+			"searchable": 1,
+			"quickSearch": 0,
+			"filterable": 0
+
+		},{
+			"key": "61",
+			"name": "🍉｜91",
+			"type": 3,
+			"api": "./1.py",
+			"searchable": 1,
+			"quickSearch": 0,
+			"filterable": 0
+
+		}
+
+	]
+}
