@@ -156,11 +156,14 @@ class Spider(Spider):
         }
 
         try:
+            print("🔍 尝试获取配置...")
             config_params = {
                 "theme": ""
             }
             self.make_api_request('/api.php/api/home/getconfig', config_params)
-        except Exception:
+            print("🔍 配置获取成功")
+        except Exception as e:
+            print(f"🔍 配置获取失败，跳过: {e}")
             # 延迟加载分类，避免初始化时的大量API请求
             pass
 
@@ -183,16 +186,29 @@ class Spider(Spider):
         """首页内容 - 使用API获取"""
         result = {}
         
-        print(f"🔍 调试信息: 开始加载首页内容")
+        print(f"🔍 开始加载首页内容...")
+        
+        try:
+            # 获取分类
+            print(f"🔍 正在获取分类...")
+            classes = self.get_categories()
+            print(f"🔍 获取到的分类数量: {len(classes)}")
+            
+            if not classes:
+                print("❌ 分类为空，使用默认分类")
+                classes = [{'type_id': '1', 'type_name': '推荐'}]
+                self.category_config = {'1': {'name': '推荐', 'api': '/api/navigation/theme', 'params': {'id': 1, 'type': '1'}}}
+            
+        except Exception as e:
+            print(f"❌ 获取分类失败: {e}")
+            # 使用默认分类
+            classes = [{'type_id': '1', 'type_name': '推荐'}]
+            self.category_config = {'1': {'name': '推荐', 'api': '/api/navigation/theme', 'params': {'id': 1, 'type': '1'}}}
+        
         print(f"🔍 分类配置数量: {len(self.category_config)}")
         
-        # 获取分类
-        classes = self.get_categories()
-        print(f"🔍 获取到的分类数量: {len(classes)}")
-        
         # 首页完全不加载过滤器，采用最激进的懒加载策略
-        filters = {}
-        print(f"🔍 首页完全不加载过滤器，采用最激进的懒加载策略")
+        print(f"🔍 首页不加载过滤器，采用懒加载策略")
         
         # 选择默认分类
         default_tid = None
@@ -209,19 +225,23 @@ class Spider(Spider):
         
         videos = []
         if default_tid:
-            cfg = self.category_config.get(default_tid, {})
-            print(f"🔍 默认分类配置: {cfg}")
-            
-            api_path = cfg.get('api') or '/api.php/api/navigation/theme'
-            params = cfg.get('params', {}).copy()
-            params.setdefault('theme', '')
-            params.setdefault('page', '1')
-            
-            print(f"🔍 请求API: {api_path}")
-            print(f"🔍 请求参数: {params}")
-            
-            videos = self.get_video_list(page="1", params=params, api_path=api_path)
-            print(f"🔍 获取到的视频数量: {len(videos)}")
+            try:
+                cfg = self.category_config.get(default_tid, {})
+                print(f"🔍 默认分类配置: {cfg}")
+                
+                api_path = cfg.get('api') or '/api.php/api/navigation/theme'
+                params = cfg.get('params', {}).copy()
+                params.setdefault('theme', '')
+                params.setdefault('page', '1')
+                
+                print(f"🔍 请求API: {api_path}")
+                print(f"🔍 请求参数: {params}")
+                
+                videos = self.get_video_list(page="1", params=params, api_path=api_path)
+                print(f"🔍 获取到的视频数量: {len(videos)}")
+            except Exception as e:
+                print(f"❌ 获取视频列表失败: {e}")
+                videos = []
         else:
             print("❌ 错误: 没有找到可用的默认分类")
         
