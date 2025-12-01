@@ -883,7 +883,7 @@ class Spider(Spider):
                     "style": 1,
                     "has_rank": 0,
                     "api": "/api/navigation/theme",
-                    "params": {"id": 13, "sort": "new"},
+                    "params": {"id": 5, "sort": "new"},
                     "h5_url": ""
                 },
                 {
@@ -893,7 +893,7 @@ class Spider(Spider):
                     "style": 1,
                     "has_rank": 0,
                     "api": "/api/navigation/theme",
-                    "params": {"id": 14, "sort": "new"},
+                    "params": {"id": 7, "sort": "new"},
                     "h5_url": ""
                 }
 
