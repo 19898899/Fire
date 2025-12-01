@@ -266,8 +266,20 @@ class Spider(Spider):
             print("❌ 错误: 没有找到可用的默认分类")
         
         result['class'] = classes
-        # 首页不返回过滤器，让用户进入分类后再加载
         result['list'] = videos
+        
+        # 首页也返回过滤器，让用户在首页就能看到系列选项
+        if default_tid:
+            cfg = self.category_config.get(default_tid, {})
+            series = cfg.get('series', [])
+            if series:
+                filters = {}
+                options = [{'n': '全部', 'v': ''}]
+                for s in series:
+                    options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
+                filters[default_tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+                result['filters'] = filters
+                print(f"🔍 首页返回过滤器，选项数量: {len(options)}")
         
         print(f"✅ 首页内容加载完成: {len(classes)}个分类, {len(videos)}个视频")
         return result
