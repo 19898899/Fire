@@ -255,11 +255,7 @@ class Spider(Spider):
     def homeVideoContent(self):
         """首页视频内容（给部分壳子用）"""
         # 复用 homeContent 的默认分类逻辑，只返回视频列表部分
-        try:
-            data = self.homeContent(False)
-            return data.get('list', []) if isinstance(data, dict) else []
-        except Exception:
-            return []
+        pass
 
     def categoryContent(self, tid, pg, filter, extend):
         """分类内容"""
@@ -286,7 +282,8 @@ class Spider(Spider):
             theme_data = self.make_api_request(api_path, params)
             series = []
             if isinstance(theme_data, dict):
-                for block in theme_data.get('list', []):
+                list_data = theme_data.get('list', [])
+                for block in list_data:
                     sid = block.get('id')
                     title = block.get('title')
                     if sid and title:
@@ -658,11 +655,8 @@ class Spider(Spider):
                 vod_pic = ''
                 if raw_pic:
                     try:
-                        print(f"🔍 原始图片URL: {raw_pic}")
                         encoded_url = self.e64(raw_pic)
-                        print(f"🔍 编码后URL: {encoded_url}")
                         proxy_url = f"{self.getProxyUrl()}&url={encoded_url}"
-                        print(f"🔍 代理URL: {proxy_url}")
                         vod_pic = proxy_url
                     except Exception as e:
                         print(f"❌ 图片URL处理失败: {e}")
