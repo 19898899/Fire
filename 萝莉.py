@@ -366,13 +366,78 @@ class Spider(Spider):
                 return self.xml(dms, int(param['times']))
 
             # 图片解密处理
+            print(f"🔍 图片代理处理参数: {param}")
             url = self.d64(param['url'])
+            print(f"🔍 解码后的URL: {url}")
             match = re.search(r"loadBannerDirect\('([^']*)'", url)
             if match:
                 url = match.group(1)
-            res = requests.get(url, headers=self.headers,
-                               proxies=self.proxies, timeout=10)
-            return [200, res.headers.get('Content-Type'), self.aesimg(res.content)]
+                print(f"🔍 提取的真实URL: {url}")
+            print(f"🔍 开始请求图片...")
+            
+            # 先不使用代理尝试请求图片
+            try:
+                direct_res = requests.get(url, headers=self.headers, timeout=10)
+                print(f"🔍 直接请求图片状态码: {direct_res.status_code}")
+                print(f"🔍 直接请求内容长度: {len(direct_res.content)}")
+                print(f"🔍 直接请求Content-Type: {direct_res.headers.get('Content-Type')}")
+                
+                # 直接对所有图片进行AES解密
+                print(f"🔍 开始对图片进行AES解密...")
+                decrypted_img = self.aesimg(direct_res.content)
+                print(f"🔍 AES解密完成，解密后长度: {len(decrypted_img)}")
+                
+                # 检查解密后的数据格式并设置正确的Content-Type
+                if decrypted_img.startswith(b'\xFF\xD8\xFF'):
+                    print(f"🔍 解密成功！检测到JPEG图片")
+                    return [200, 'image/jpeg', decrypted_img]
+                elif decrypted_img.startswith(b'\x89PNG'):
+                    print(f"🔍 解密成功！检测到PNG图片")
+                    return [200, 'image/png', decrypted_img]
+                elif decrypted_img.startswith(b'GIF87a') or decrypted_img.startswith(b'GIF89a'):
+                    print(f"🔍 解密成功！检测到GIF图片")
+                    return [200, 'image/gif', decrypted_img]
+                elif decrypted_img.startswith(b'RIFF') and decrypted_img[8:12] == b'WEBP':
+                    print(f"🔍 解密成功！检测到WebP图片")
+                    return [200, 'image/webp', decrypted_img]
+                else:
+                    print(f"🔍 解密完成但格式未知，返回解密数据")
+                    return [200, 'application/octet-stream', decrypted_img]
+                        
+            except Exception as e:
+                print(f"🔍 直接请求失败: {e}")
+            
+            # 如果直接请求失败，再尝试使用代理（但仅用于HTTP）
+            if url.startswith('http://'):
+                print(f"🔍 尝试使用代理请求HTTP图片...")
+                try:
+                    res = requests.get(url, headers=self.headers, timeout=10)
+                    print(f"🔍 代理请求图片状态码: {res.status_code}")
+                    print(f"🔍 代理请求内容长度: {len(res.content)}")
+                    
+                    # 对代理请求的图片也进行AES解密
+                    print(f"🔍 对代理请求的图片进行AES解密...")
+                    decrypted_img = self.aesimg(res.content)
+                    print(f"🔍 解密后内容长度: {len(decrypted_img)}")
+                    
+                    # 检查解密后的数据格式
+                    if decrypted_img.startswith(b'\xFF\xD8\xFF'):
+                        print(f"🔍 解密成功！检测到JPEG图片")
+                        return [200, 'image/jpeg', decrypted_img]
+                    elif decrypted_img.startswith(b'\x89PNG'):
+                        print(f"🔍 解密成功！检测到PNG图片")
+                        return [200, 'image/png', decrypted_img]
+                    else:
+                        print(f"🔍 解密完成但格式未知，返回解密数据")
+                        return [200, 'application/octet-stream', decrypted_img]
+                            
+                except Exception as e:
+                    print(f"🔍 代理请求也失败: {e}")
+            else:
+                print(f"🔍 HTTPS图片不使用代理，避免CONNECT错误")
+            
+            print(f"🔍 所有请求都失败，返回空内容")
+            return [500, 'text/html', '']
 
         except Exception as e:
             print(f"代理处理错误: {e}")
@@ -462,9 +527,14 @@ class Spider(Spider):
                 vod_pic = ''
                 if raw_pic:
                     try:
+                        print(f"🔍 原始图片URL: {raw_pic}")
                         encoded_url = self.e64(raw_pic)
-                        vod_pic = f"{self.getProxyUrl()}&url={encoded_url}"
-                    except Exception:
+                        print(f"🔍 编码后URL: {encoded_url}")
+                        proxy_url = f"{self.getProxyUrl()}&url={encoded_url}"
+                        print(f"🔍 代理URL: {proxy_url}")
+                        vod_pic = proxy_url
+                    except Exception as e:
+                        print(f"❌ 图片URL处理失败: {e}")
                         vod_pic = raw_pic
                 
                 video = {
@@ -794,12 +864,48 @@ class Spider(Spider):
     def aesimg(self, word):
         """图片AES解密"""
         try:
+            print(f"🔍 开始AES解密，原始数据长度: {len(word)}")
+            print(f"🔍 原始数据前16字节: {word[:16]}")
+            
             key = b'f5d965df75336270'
             iv = b'97b60394abc2fbe1'
+            print(f"🔍 使用密钥: {key}")
+            print(f"🔍 使用IV: {iv}")
+            
+            # 检查数据长度是否为16的倍数
+            if len(word) % 16 != 0:
+                print(f"🔍 数据长度不是16的倍数，当前长度: {len(word)}")
+                # 如果不是16的倍数，可能需要填充
+                padding_needed = 16 - (len(word) % 16)
+                print(f"🔍 需要填充: {padding_needed} 字节")
+                # 但是AES-CBC解密时，数据长度应该是16的倍数
+                # 如果不是，说明数据可能有问题
+                print(f"🔍 警告：数据长度不符合AES块大小要求")
+            
+            # 确保数据长度至少为16字节
+            if len(word) < 16:
+                print(f"🔍 错误：数据长度太短，无法进行AES解密")
+                return word
+            
             cipher = AES.new(key, AES.MODE_CBC, iv)
-            decrypted = unpad(cipher.decrypt(word), AES.block_size)
+            decrypted = cipher.decrypt(word)
+            print(f"🔍 AES解密（去填充前）长度: {len(decrypted)}")
+            print(f"🔍 解密后前16字节: {decrypted[:16]}")
+            
+            # 尝试去填充
+            try:
+                decrypted = unpad(decrypted, AES.block_size)
+                print(f"🔍 去填充后长度: {len(decrypted)}")
+                print(f"🔍 去填充后前16字节: {decrypted[:16]}")
+            except Exception as pad_error:
+                print(f"🔍 去填充失败: {pad_error}")
+                print(f"🔍 使用未去填充的数据")
+            
             return decrypted
         except Exception as e:
-            print(f"图片AES解密失败: {e}")
+            print(f"❌ 图片AES解密失败: {e}")
+            print(f"❌ 错误类型: {type(e).__name__}")
+            import traceback
+            print(f"❌ 详细错误: {traceback.format_exc()}")
             # 如果解密失败，返回原始数据
             return word
