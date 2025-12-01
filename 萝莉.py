@@ -267,30 +267,37 @@ class Spider(Spider):
         
         print(f"🔍 选择的默认分类ID: {default_tid}")
         
-        # 优化：首页只加载默认分类的过滤器，避免过多API请求导致卡顿
+        # 重新加载所有分类的过滤器，但优化性能
         all_filters = {}
+        theme_categories = []
         
-        if default_tid:
-            cfg = self.category_config.get(default_tid, {})
+        # 先找出所有使用theme API的分类
+        for tid, cfg in self.category_config.items():
             if cfg.get('api', '').endswith('/navigation/theme'):
-                print(f"🔍 首页只为默认分类 {cfg.get('name')} 加载过滤器，避免卡顿...")
-                try:
-                    series = self.get_series_with_cache(default_tid, cfg)
-                    cfg['series'] = series
-                    
-                    # 为默认分类构建过滤器
-                    if series:
-                        options = [{'n': '全部', 'v': ''}]
-                        for s in series:
-                            options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
-                        all_filters[default_tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
-                        print(f"🔍 为默认分类 {cfg.get('name')} 构建过滤器，选项数量: {len(options)}")
-                    
-                except Exception as e:
-                    print(f"❌ 默认分类 {cfg.get('name')} 加载失败: {e}")
-                    cfg['series'] = []
+                theme_categories.append((tid, cfg))
         
-        print(f"🔍 首页加载策略：只为默认分类构建过滤器，其他分类过滤器将在用户访问时动态加载")
+        print(f"🔍 发现 {len(theme_categories)} 个分类使用theme API，开始加载系列数据...")
+        
+        # 为所有分类加载系列数据（使用缓存机制）
+        for tid, cfg in theme_categories:
+            try:
+                print(f"🔍 为分类 {cfg.get('name')} 加载过滤器...")
+                series = self.get_series_with_cache(tid, cfg)
+                cfg['series'] = series
+                
+                # 为该分类构建过滤器
+                if series:
+                    options = [{'n': '全部', 'v': ''}]
+                    for s in series:
+                        options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
+                    all_filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+                    print(f"🔍 为分类 {cfg.get('name')} 构建过滤器，选项数量: {len(options)}")
+                else:
+                    print(f"🔍 分类 {cfg.get('name')} 没有系列数据")
+                
+            except Exception as e:
+                print(f"❌ 分类 {cfg.get('name')} 加载失败: {e}")
+                cfg['series'] = []
         
         videos = []
         if default_tid:
