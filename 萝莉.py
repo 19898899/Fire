@@ -152,7 +152,6 @@ class Spider(Spider):
             "oauth_id": dynamic_oauth_id,
             "version": "4.2.0",
             "build_affcode": "gw",
-            "sort":"new",
             "token": ""
         }
 
@@ -287,6 +286,34 @@ class Spider(Spider):
             result['total'] = 0
             return result
         
+        # 按需加载该分类的系列数据（用于过滤器）
+        series = cfg.get('series') or []
+        if not series and cfg.get('api', '').endswith('/navigation/theme'):
+            print(f"🔍 为分类 {cfg.get('name')} 按需加载系列数据...")
+            api_path = cfg.get('api') or ''
+            params = cfg.get('params', {}).copy()
+            params.setdefault('theme', '')
+            params.setdefault('page', '1')
+            theme_data = self.make_api_request(api_path, params)
+            series = []
+            if isinstance(theme_data, dict):
+                for block in theme_data.get('list', []):
+                    sid = block.get('id')
+                    title = block.get('title')
+                    if sid and title:
+                        series.append({'id': sid, 'name': title})
+            cfg['series'] = series
+            print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
+        
+        # 设置过滤器（动态返回给前端）
+        filters = {}
+        if series:
+            options = [{'n': '全部', 'v': ''}]
+            for s in series:
+                options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
+            filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+            print(f"🔍 为分类 {cfg.get('name')} 动态设置过滤器，选项数量: {len(options)}")
+        
         series_id = None
         sort = None
         if extend:
@@ -320,7 +347,9 @@ class Spider(Spider):
         result['pagecount'] = 99999
         result['limit'] = 90
         result['total'] = 999999
-        # 注意：categoryContent 不应该返回 filters，这是TVBox规范
+        # 动态返回过滤器，让前端能够显示过滤选项
+        if filters:
+            result['filters'] = filters
         return result
 
     def detailContent(self, ids):
