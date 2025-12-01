@@ -229,13 +229,33 @@ class Spider(Spider):
                 cfg = self.category_config.get(default_tid, {})
                 print(f"🔍 默认分类配置: {cfg}")
                 
+                # 首页加载时获取系列数据（但只加载一次，避免重复）
+                if cfg.get('api', '').endswith('/navigation/theme') and not cfg.get('series'):
+                    print(f"🔍 首页获取默认分类的系列数据...")
+                    api_path = cfg.get('api') or ''
+                    params = cfg.get('params', {}).copy()
+                    params.setdefault('theme', '')
+                    params.setdefault('page', '1')
+                    theme_data = self.make_api_request(api_path, params)
+                    series = []
+                    if isinstance(theme_data, dict):
+                        data_section = theme_data.get('data', {})
+                        list_data = data_section.get('list', [])
+                        for block in list_data:
+                            sid = block.get('id')
+                            title = block.get('title')
+                            if sid and title:
+                                series.append({'id': sid, 'name': title})
+                    cfg['series'] = series
+                    print(f"🔍 首页获取了 {len(series)} 个系列")
+                
                 api_path = cfg.get('api') or '/api.php/api/navigation/theme'
                 params = cfg.get('params', {}).copy()
                 params.setdefault('theme', '')
                 params.setdefault('page', '1')
                 
-                print(f"🔍 请求API: {api_path}")
-                print(f"🔍 请求参数: {params}")
+                # print(f"🔍 请求API: {api_path}")
+                # print(f"🔍 请求参数: {params}")
                 
                 videos = self.get_video_list(page="1", params=params, api_path=api_path)
                 print(f"🔍 获取到的视频数量: {len(videos)}")
@@ -282,7 +302,8 @@ class Spider(Spider):
             theme_data = self.make_api_request(api_path, params)
             series = []
             if isinstance(theme_data, dict):
-                list_data = theme_data.get('list', [])
+                data_section = theme_data.get('data', {})
+                list_data = data_section.get('list', [])
                 for block in list_data:
                     sid = block.get('id')
                     title = block.get('title')
@@ -581,8 +602,8 @@ class Spider(Spider):
                 return None
             
             url = f"{self.domin}{api_path}"
-            print(f"🔍 API请求URL: {url}")
-            print(f"🔍 请求参数: {all_params}")
+            # print(f"🔍 API请求URL: {url}")
+            # print(f"🔍 请求参数: {all_params}")
             
             # API请求不使用代理，避免CONNECT错误
             response = requests.post(
