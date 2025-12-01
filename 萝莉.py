@@ -873,21 +873,21 @@ class Spider(Spider):
                 },{
                     "current": False,
                     "id": 13,
-                    "name": "小马拉大车",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 13, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 14,
-                    "name": "强奸",
+                    "name": "小强",
                     "style": 1,
                     "has_rank": 0,
                     "api": "/api/navigation/theme",
                     "params": {"id": 14, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 13,
+                    "name": "小马",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 13, "sort": "new"},
                     "h5_url": ""
                 }
 
