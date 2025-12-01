@@ -190,29 +190,10 @@ class Spider(Spider):
         classes = self.get_categories()
         print(f"🔍 获取到的分类数量: {len(classes)}")
         
-        # 确保所有分类的系列数据都已加载完成
-        print(f"🔍 确保分类数据完全加载...")
-        # 强制触发分类加载（如果还没有加载的话）
-        if not self._categories_loaded:
-            self.load_categories()
-            self._categories_loaded = True
-        
-        # 设置过滤器
+        # 首页不设置过滤器，避免加载所有系列数据
+        # 过滤器将在用户进入具体分类时按需加载
         filters = {}
-        print(f"🔍 开始设置过滤器，分类配置数量: {len(self.category_config)}")
-        for tid, cfg in self.category_config.items():
-            series = cfg.get('series') or []
-            print(f"🔍 分类 {cfg.get('name')} (tid={tid}) 的系列数量: {len(series)}")
-            if series:
-                options = [{'n': '全部', 'v': ''}]
-                for s in series:
-                    options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
-                filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
-                print(f"🔍 为分类 {cfg.get('name')} 设置了过滤器，选项数量: {len(options)}")
-            else:
-                print(f"🔍 分类 {cfg.get('name')} 没有系列数据，跳过过滤器设置")
-        
-        print(f"🔍 最终设置的过滤器数量: {len(filters)}")
+        print(f"🔍 首页跳过过滤器设置，将在分类页面按需加载")
         
         # 选择默认分类
         default_tid = None
@@ -274,6 +255,35 @@ class Spider(Spider):
             result['limit'] = 90
             result['total'] = 0
             return result
+        
+        # 按需加载该分类的系列数据（用于过滤器）
+        series = cfg.get('series') or []
+        if not series and cfg.get('api', '').endswith('/navigation/theme'):
+            print(f"🔍 为分类 {cfg.get('name')} 按需加载系列数据...")
+            api_path = cfg.get('api') or ''
+            params = cfg.get('params', {}).copy()
+            params.setdefault('theme', '')
+            params.setdefault('page', '1')
+            theme_data = self.make_api_request(api_path, params)
+            series = []
+            if isinstance(theme_data, dict):
+                for block in theme_data.get('list', []):
+                    sid = block.get('id')
+                    title = block.get('title')
+                    if sid and title:
+                        series.append({'id': sid, 'name': title})
+            cfg['series'] = series
+            print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
+        
+        # 设置过滤器（如果有系列数据）
+        filters = {}
+        if series:
+            options = [{'n': '全部', 'v': ''}]
+            for s in series:
+                options.append({'n': s.get('name', ''), 'v': str(s.get('id'))})
+            filters[tid] = [{'key': 'series_id', 'name': '分类', 'value': options}]
+            print(f"🔍 为分类 {cfg.get('name')} 设置了过滤器，选项数量: {len(options)}")
+        
         series_id = None
         sort = None
         if extend:
@@ -301,6 +311,8 @@ class Spider(Spider):
         result['pagecount'] = 99999
         result['limit'] = 90
         result['total'] = 999999
+        if filters:
+            result['filters'] = filters
         return result
 
     def detailContent(self, ids):
