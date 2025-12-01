@@ -169,6 +169,53 @@ class Spider(Spider):
 
         self.category_config = {}
         self._categories_loaded = False
+        # 添加系列数据缓存
+        self.series_cache = {}  # {tid: {'series': [...], 'timestamp': 1234567890}}
+        self.cache_ttl = 3600  # 缓存1小时
+
+    def get_series_with_cache(self, tid, cfg):
+        """智能获取系列数据（带缓存）"""
+        current_time = time.time()
+        cache_key = str(tid)
+        
+        # 检查缓存
+        if cache_key in self.series_cache:
+            cache_data = self.series_cache[cache_key]
+            if current_time - cache_data['timestamp'] < self.cache_ttl:
+                print(f"🔍 使用缓存数据：分类 {cfg.get('name')}，缓存时间 {current_time - cache_data['timestamp']:.0f}秒")
+                return cache_data['series']
+            else:
+                print(f"🔍 缓存过期：分类 {cfg.get('name')}，重新获取")
+        
+        # 缓存不存在或过期，重新获取
+        print(f"🔍 从API获取系列数据：分类 {cfg.get('name')}")
+        try:
+            api_path = cfg.get('api') or ''
+            params = cfg.get('params', {}).copy()
+            params.setdefault('theme', '')
+            params.setdefault('page', '1')
+            theme_data = self.make_api_request(api_path, params)
+            series = []
+            if isinstance(theme_data, dict):
+                data_section = theme_data.get('data', {})
+                list_data = data_section.get('list', [])
+                for block in list_data:
+                    sid = block.get('id')
+                    title = block.get('title')
+                    if sid and title:
+                        series.append({'id': sid, 'name': title})
+            
+            # 更新缓存
+            self.series_cache[cache_key] = {
+                'series': series,
+                'timestamp': current_time
+            }
+            print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列，已缓存")
+            return series
+            
+        except Exception as e:
+            print(f"❌ 分类 {cfg.get('name')} 加载失败: {e}")
+            return []
 
     def getName(self):
         return "51吸瓜API版"
@@ -231,26 +278,11 @@ class Spider(Spider):
         
         print(f"🔍 发现 {len(theme_categories)} 个分类使用theme API，开始并发加载系列数据...")
         
-        # 并发加载所有分类的系列数据
+        # 并发加载所有分类的系列数据（使用缓存）
         for tid, cfg in theme_categories:
             try:
-                print(f"🔍 为分类 {cfg.get('name')} (tid={tid}) 加载系列数据...")
-                api_path = cfg.get('api') or ''
-                params = cfg.get('params', {}).copy()
-                params.setdefault('theme', '')
-                params.setdefault('page', '1')
-                theme_data = self.make_api_request(api_path, params)
-                series = []
-                if isinstance(theme_data, dict):
-                    data_section = theme_data.get('data', {})
-                    list_data = data_section.get('list', [])
-                    for block in list_data:
-                        sid = block.get('id')
-                        title = block.get('title')
-                        if sid and title:
-                            series.append({'id': sid, 'name': title})
+                series = self.get_series_with_cache(tid, cfg)
                 cfg['series'] = series
-                print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
                 
                 # 为该分类构建过滤器
                 if series:
@@ -333,26 +365,11 @@ class Spider(Spider):
             result['total'] = 0
             return result
         
-        # 按需加载该分类的系列数据（用于过滤器）
+        # 按需加载该分类的系列数据（使用缓存）
         series = cfg.get('series') or []
         if not series and cfg.get('api', '').endswith('/navigation/theme'):
-            print(f"🔍 为分类 {cfg.get('name')} 按需加载系列数据...")
-            api_path = cfg.get('api') or ''
-            params = cfg.get('params', {}).copy()
-            params.setdefault('theme', '')
-            params.setdefault('page', '1')
-            theme_data = self.make_api_request(api_path, params)
-            series = []
-            if isinstance(theme_data, dict):
-                data_section = theme_data.get('data', {})
-                list_data = data_section.get('list', [])
-                for block in list_data:
-                    sid = block.get('id')
-                    title = block.get('title')
-                    if sid and title:
-                        series.append({'id': sid, 'name': title})
+            series = self.get_series_with_cache(tid, cfg)
             cfg['series'] = series
-            print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
         
         # 设置过滤器（动态返回给前端）
         filters = {}
