@@ -339,7 +339,7 @@ class Spider(Spider):
             print("❌ 错误: 没有找到可用的默认分类")
         
         result['class'] = classes
-        result['list'] = videos
+        # result['list'] = videos
         
         # 首页返回所有分类的过滤器
         if all_filters:
@@ -870,7 +870,27 @@ class Spider(Spider):
                     "api": "/api/navigation/theme",
                     "params": {"id": 8, "sort": "new"},
                     "h5_url": ""
+                },{
+                    "current": False,
+                    "id": 13,
+                    "name": "小马拉大车",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 13, "sort": "new"},
+                    "h5_url": ""
+                },
+                {
+                    "current": False,
+                    "id": 14,
+                    "name": "强奸",
+                    "style": 1,
+                    "has_rank": 0,
+                    "api": "/api/navigation/theme",
+                    "params": {"id": 14, "sort": "new"},
+                    "h5_url": ""
                 }
+
             ]
 
             if not data:
@@ -919,7 +939,7 @@ class Spider(Spider):
         categories = []
         
         # 按照硬编码的顺序返回分类，确保显示顺序正确
-        category_order = ['1', '4', '10', '3', '2', '6', '9', '8']
+        category_order = ['1', '4', '10', '3', '2', '6', '9', '8','13','14']
         
         for tid in category_order:
             cfg = self.category_config.get(tid)
