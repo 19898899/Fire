@@ -124,10 +124,12 @@ class Spider(Spider):
     def init(self, extend="{}"):
 
         self.domin = 'https://sapi01.eihpijd.xyz'
-        self.proxies = {
+        # 代理只用于图片，API请求不使用代理
+        self.image_proxies = {
             'http': 'http://127.0.0.1:9978',
             'https': 'http://127.0.0.1:9978'
         }
+        self.proxies = {}  # API请求不使用代理
         # 请求头
         self.headers = {
             'User-Agent': "okhttp-okgo/jeasonlzy",
@@ -159,10 +161,11 @@ class Spider(Spider):
             }
             self.make_api_request('/api.php/api/home/getconfig', config_params)
         except Exception:
+            # 延迟加载分类，避免初始化时的大量API请求
             pass
 
         self.category_config = {}
-        self.load_categories()
+        self._categories_loaded = False
 
     def getName(self):
         return "51吸瓜API版"
@@ -289,18 +292,32 @@ class Spider(Spider):
     def detailContent(self, ids):
         """详情内容"""
         video_id = ids[0]
+        print(f"🔍 获取视频详情，ID: {video_id}")
 
         params = {
             "theme": "",
             "id": video_id
         }
+        print(f"🔍 详情API请求参数: {params}")
         response_data = self.make_api_request('/api.php/api/mv/detail', params)
+        print(f"🔍 详情API响应: {response_data}")
+        
         if not response_data:
+            print(f"❌ 详情API响应为空")
             return {'list': []}
 
-        row = response_data.get('row', {}) if isinstance(
-            response_data, dict) else {}
+        # 修复：数据在 data.row 中，不是直接在根级别
+        row = {}
+        if isinstance(response_data, dict):
+            data_section = response_data.get('data', {})
+            if isinstance(data_section, dict):
+                row = data_section.get('row', {})
+        
+        print(f"🔍 解析的视频详情数据: {row}")
+        
         vod = self.parse_video_detail(row, video_id)
+        print(f"🔍 最终返回的详情数据: {vod}")
+        
         return {'list': [vod]}
 
     def searchContent(self, key, quick, pg="1"):
@@ -310,7 +327,16 @@ class Spider(Spider):
             "theme": key
         }
         videos = self.get_video_list(page=str(pg), params=params)
-        return {'list': videos, 'page': pg}
+        
+        # 添加分页信息
+        result = {
+            'list': videos,
+            'page': pg,
+            'pagecount': 99999,  # 设置一个较大的值表示有很多页
+            'limit': 90,
+            'total': 999999
+        }
+        return result
 
     def playerContent(self, flag, id, vipFlags):
         """播放内容"""
@@ -325,7 +351,12 @@ class Spider(Spider):
         if not p:
             pid = f"{self.getProxyUrl()}&pdid={quote(id)}&type=m3u8"
 
-        return {'parse': p, 'url': pid, 'header': self.headers}
+        # 返回标准格式的播放信息
+        result = {
+            'header': json.dumps(self.headers),  # header需要是JSON字符串
+            'url': pid
+        }
+        return result
 
     def localProxy(self, param):
         """本地代理处理"""
@@ -407,11 +438,11 @@ class Spider(Spider):
             except Exception as e:
                 print(f"🔍 直接请求失败: {e}")
             
-            # 如果直接请求失败，再尝试使用代理（但仅用于HTTP）
+            # 如果直接请求失败，再尝试使用图片代理（但仅用于HTTP）
             if url.startswith('http://'):
-                print(f"🔍 尝试使用代理请求HTTP图片...")
+                print(f"🔍 尝试使用图片代理请求HTTP图片...")
                 try:
-                    res = requests.get(url, headers=self.headers, timeout=10)
+                    res = requests.get(url, headers=self.headers, proxies=self.image_proxies, timeout=10)
                     print(f"🔍 代理请求图片状态码: {res.status_code}")
                     print(f"🔍 代理请求内容长度: {len(res.content)}")
                     
@@ -432,7 +463,7 @@ class Spider(Spider):
                         return [200, 'application/octet-stream', decrypted_img]
                             
                 except Exception as e:
-                    print(f"🔍 代理请求也失败: {e}")
+                    print(f"🔍 图片代理请求也失败: {e}")
             else:
                 print(f"🔍 HTTPS图片不使用代理，避免CONNECT错误")
             
@@ -449,18 +480,22 @@ class Spider(Spider):
             all_params = self.base_params.copy()
             if params:
                 all_params.update(params)
-            payload = self.encryptor.encrypt_params(all_params)
-            if not payload:
+            
+            encrypted_params = self.encryptor.encrypt_params(all_params)
+            if not encrypted_params:
                 return None
-            url = self.domin + api_path
-            # 对齐单独测试脚本：为每个接口设置 document-url 头
-            self.headers['document-url'] = api_path
+            
+            url = f"{self.domin}{api_path}"
+            print(f"🔍 API请求URL: {url}")
+            print(f"🔍 请求参数: {all_params}")
+            
+            # API请求不使用代理，避免CONNECT错误
             response = requests.post(
                 url,
-                data=payload,
+                data=encrypted_params,
                 headers=self.headers,
-                timeout=10,
-                verify=False
+                timeout=30,
+                verify=False  # 禁用SSL验证
             )
             if response.status_code != 200:
                 print(f"API请求失败，状态码: {response.status_code}")
@@ -474,10 +509,8 @@ class Spider(Spider):
             if encrypted_data:
                 decrypted_data = self.encryptor.aes_decrypt(encrypted_data)
                 if decrypted_data:
-                    try:
-                        return json.loads(decrypted_data)
-                    except:
-                        return decrypted_data
+                    import json
+                    return json.loads(decrypted_data)
             return None
         except Exception as e:
             print(f"API请求异常: {e}")
@@ -537,12 +570,19 @@ class Spider(Spider):
                         print(f"❌ 图片URL处理失败: {e}")
                         vod_pic = raw_pic
                 
+                # 获取年份 - 从创建时间中提取
+                created_str = item.get('created_str', '')
+                vod_year = ''
+                if created_str and len(created_str) >= 4:
+                    vod_year = created_str[:4]
+                
                 video = {
                     'vod_id': str(item.get('id', '')),
                     'vod_name': item.get('title', '未知标题'),
                     'vod_pic': vod_pic,
                     'vod_remarks': item.get('duration_str', '') or item.get('created_str', ''),
-                    'vod_tag': item.get('tags', ''),
+                    'vod_year': vod_year,
+                    'vod_tag': 'file',  # 默认为file类型，点击跳转详情页
                     'style': {"type": "rect", "ratio": 2.3}
                 }
                 video = {k: v for k, v in video.items() if v}
@@ -735,11 +775,15 @@ class Spider(Spider):
                     'params': item.get('params', {}) or {}
                 }
                 self.category_config[tid] = cfg
-            # 再为 theme 类分类加载系列小分类
+            # 简化分类加载，避免大量API请求
+            # 只为推荐分类加载系列数据，其他分类使用空系列
             for tid, cfg in list(self.category_config.items()):
                 api_path = cfg.get('api') or ''
                 params = cfg.get('params', {}).copy()
-                if api_path.endswith('/navigation/theme') and params.get('id'):
+                
+                # 只为推荐分类（id=1）加载系列数据
+                if api_path.endswith('/navigation/theme') and params.get('id') == 1:
+                    print(f"🔍 为推荐分类加载系列数据...")
                     params.setdefault('theme', '')
                     params.setdefault('page', '1')
                     theme_data = self.make_api_request(api_path, params)
@@ -751,11 +795,23 @@ class Spider(Spider):
                             if sid and title:
                                 series.append({'id': sid, 'name': title})
                     cfg['series'] = series
+                    print(f"🔍 推荐分类加载了 {len(series)} 个系列")
+                else:
+                    # 其他分类使用空系列，避免API请求
+                    cfg['series'] = []
         except Exception as e:
             print(f"加载分类失败: {e}")
 
+    def _ensure_categories_loaded(self):
+        """确保分类已加载（按需加载）"""
+        if not self._categories_loaded:
+            print(f"🔍 按需加载分类配置...")
+            self.load_categories()
+            self._categories_loaded = True
+
     def get_categories(self):
         """根据已加载的导航生成分类列表"""
+        self._ensure_categories_loaded()
         categories = []
         for tid, cfg in self.category_config.items():
             name = cfg.get('name')
@@ -769,6 +825,13 @@ class Spider(Spider):
 
     def parse_video_detail(self, data, video_id):
         """解析视频详情"""
+        print(f"🔍 开始解析视频详情，video_id: {video_id}")
+        print(f"🔍 原始数据: {data}")
+        
+        # 获取标题
+        vod_name = data.get('title', '未知标题')
+        
+        # 获取图片URL并处理代理
         raw_pic = data.get('cover_thumb_url', '') or data.get('thumb', '')
         vod_pic = ''
         if raw_pic:
@@ -778,26 +841,114 @@ class Spider(Spider):
             except Exception:
                 vod_pic = raw_pic
         
-        vod = {
-            'vod_id': video_id,
-            'vod_name': data.get('title', '未知标题'),
-            'vod_pic': vod_pic,
-            'vod_content': data.get('description', '') or data.get('actors', ''),
-            'vod_play_from': '51吸瓜',
-            'vod_play_url': ''
-        }
+        # 获取备注信息 - 使用时长作为备注
+        vod_remarks = data.get('duration_str', '')
+        
+        # 获取年份 - 从创建时间中提取年份
+        created_str = data.get('created_str', '')
+        vod_year = ''
+        if created_str and len(created_str) >= 4:
+            vod_year = created_str[:4]
+        
+        # 获取地区信息 - 如果API中有地区字段
+        vod_area = data.get('area', '')
+        
+        # 获取类型名称 - 从标签列表中获取第一个作为类型
+        tags_list = data.get('tags_list', [])
+        type_name = tags_list[0] if tags_list else ''
+        
+        # 获取演员信息
+        vod_actor = data.get('actors', '')
+        
+        # 获取导演信息
+        vod_director = data.get('director', '')
+        
+        # 获取内容描述 - 组合多个字段信息
+        content_parts = []
+        
+        # 添加标签信息
+        if tags_list:
+            content_parts.append(f"标签: {', '.join(tags_list)}")
+        
+        # 添加演员信息
+        if vod_actor:
+            content_parts.append(f"演员: {vod_actor}")
+        
+        # 添加描述信息
+        description = data.get('description', '')
+        if description:
+            content_parts.append(f"简介: {description}")
+        
+        # 添加时长信息
+        if vod_remarks:
+            content_parts.append(f"时长: {vod_remarks}")
+        
+        # 添加评分信息
+        rating = data.get('rating', 0)
+        if rating:
+            content_parts.append(f"评分: {rating}")
+        
+        # 添加点赞数
+        like = data.get('like', 0)
+        if like:
+            content_parts.append(f"点赞: {like}")
+        
+        # 添加视频类型信息
+        is_free_str = data.get('is_free_str', '')
+        if is_free_str:
+            content_parts.append(f"类型: {is_free_str}")
+        
+        # 组合所有内容
+        vod_content = ' | '.join(content_parts) if content_parts else ''
+        print(f"🔍 组合的内容信息: {vod_content}")
+        
+        # 处理播放地址
         play_url = data.get('play_url', '')
+        print(f"🔍 获取到的原始play_url: {play_url}")
+        
         if play_url:
-            vod['vod_play_url'] = f"正片${video_id}_dm_{play_url}"
+            # 替换域名：将 https://10play. 替换为 https://long.
+            # 使用正则表达式匹配 https://数字+play. 的模式
+            import re
+            processed_url = re.sub(r'https://\d+play\.', 'https://long.', play_url)
+            print(f"🔍 处理后的播放地址: {processed_url}")
+            
+            # 设置播放地址格式
+            vod_play_url = f"正片${video_id}_dm_{processed_url}"
+        else:
+            vod_play_url = ''
+        
+        # 处理剧集列表
         episodes = data.get('episodes', [])
+        print(f"🔍 获取到的episodes: {episodes}")
         if episodes:
             play_list = []
             for idx, episode in enumerate(episodes, 1):
                 episode_url = episode.get('url', '')
                 if episode_url:
-                    play_list.append(f"第{idx}集${video_id}_dm_{episode_url}")
+                    # 同样替换剧集URL的域名
+                    processed_episode_url = re.sub(r'https://\d+play\.', 'https://long.', episode_url)
+                    play_list.append(f"第{idx}集${video_id}_dm_{processed_episode_url}")
             if play_list:
-                vod['vod_play_url'] = '#'.join(play_list)
+                vod_play_url = '#'.join(play_list)
+                print(f"🔍 设置剧集播放地址: {vod_play_url}")
+        
+        vod = {
+            'vod_id': video_id,
+            'vod_name': vod_name,
+            'vod_pic': vod_pic,
+            'vod_remarks': vod_remarks,
+            'vod_year': vod_year,
+            'vod_area': vod_area,
+            'type_name': type_name,
+            'vod_actor': vod_actor,
+            'vod_director': vod_director,
+            'vod_content': vod_content,
+            'vod_play_from': '51吸瓜',
+            'vod_play_url': vod_play_url
+        }
+        
+        print(f"🔍 最终解析的vod数据: {vod}")
         return vod
 
     # 保留原有的工具方法
