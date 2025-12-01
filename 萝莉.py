@@ -428,6 +428,11 @@ class Spider(Spider):
         # 动态返回过滤器，让前端能够显示过滤选项
         if filters:
             result['filters'] = filters
+            print(f"🔍 返回过滤器数据: {filters}")
+        else:
+            print(f"🔍 没有过滤器数据返回")
+        
+        print(f"🔍 categoryContent最终返回: list={len(videos)}, filters={bool(filters)}")
         return result
 
     def detailContent(self, ids):
@@ -786,167 +791,11 @@ class Spider(Spider):
                 if video.get('vod_id') and video.get('vod_name'):
                     videos.append(video)
         return videos
-
-    def load_categories(self):
-        """加载导航大分类及其系列小分类（使用本地写死的数据，不再请求 navigation/index 接口）"""
         try:
-            # 直接使用拦截到的 /api.php/api/navigation/index 解密数据，避免每次发起请求
-            data = [
-                {
-                    "current": False,
-                    "id": -1,
-                    "name": "关注",
-                    "style": 0,
-                    "has_rank": 0,
-                    "api": "/api/navigation/list_follows",
-                    "params": {"type": "1"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": -1,
-                    "name": "精选",
-                    "style": 10,
-                    "has_rank": 0,
-                    "api": "/api/navigation/list_short_mv",
-                    "params": {"type": "1"},
-                    "h5_url": ""
-                },
-                {
-                    "current": True,
-                    "id": 1,
-                    "name": "推荐",
-                    "style": 1,
-                    "has_rank": 1,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 1, "type": "1"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 16,
-                    "name": "17岁",
-                    "style": 3,
-                    "has_rank": 0,
-                    "api": "",
-                    "params": {"id": 16},
-                    "h5_url": "https://865.nzcnxez.xyz/index.php?m=index&a=seventeen&token=bhnHK-9905"
-                },
-                {
-                    "current": False,
-                    "id": -1,
-                    "name": "发现",
-                    "style": 2,
-                    "has_rank": 0,
-                    "api": "/api/navigation/found",
-                    "params": {"type": "1"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 4,
-                    "name": "福利姬",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 4, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 7,
-                    "name": "动漫次元",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 7, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 10,
-                    "name": "乱伦禁爱",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 10, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 3,
-                    "name": "网黄嫩模",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 3, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 2,
-                    "name": "原创传媒",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 2, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 6,
-                    "name": "国产直播",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 6, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 9,
-                    "name": "制服诱惑",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 9, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 5,
-                    "name": "日本AV",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 5, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 8,
-                    "name": "异国风情",
-                    "style": 1,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 8, "sort": "new"},
-                    "h5_url": ""
-                },
-                {
-                    "current": False,
-                    "id": 16,
-                    "name": "17岁",
-                    "style": 3,
-                    "has_rank": 0,
-                    "api": "/api/navigation/theme",
-                    "params": {"id": 16, "sort": "new"},
-                    "h5_url": ""
-                }
-            ]
-
-            if not data:
-                return
-            if not isinstance(data, list):
+            encoded_url = self.e64(raw_pic)
+            vod_pic = f"{self.getProxyUrl()}&url={encoded_url}"
+        except Exception:
+            vod_pic = raw_pic
                 return
             # 先构建大分类配置（保持原有过滤规则）
             for item in data:
