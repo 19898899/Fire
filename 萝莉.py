@@ -821,15 +821,14 @@ class Spider(Spider):
                     'params': item.get('params', {}) or {}
                 }
                 self.category_config[tid] = cfg
-            # 简化分类加载，避免大量API请求
-            # 只为推荐分类加载系列数据，其他分类使用空系列
+            # 为所有分类加载系列数据，实现完整的过滤功能
             for tid, cfg in list(self.category_config.items()):
                 api_path = cfg.get('api') or ''
                 params = cfg.get('params', {}).copy()
                 
-                # 只为推荐分类（id=1）加载系列数据
-                if api_path.endswith('/navigation/theme') and params.get('id') == 1:
-                    print(f"🔍 为推荐分类加载系列数据...")
+                # 为所有使用 theme 接口的分类加载系列数据
+                if api_path.endswith('/navigation/theme'):
+                    print(f"🔍 为分类 {cfg.get('name')} (tid={tid}) 加载系列数据...")
                     params.setdefault('theme', '')
                     params.setdefault('page', '1')
                     theme_data = self.make_api_request(api_path, params)
@@ -841,9 +840,9 @@ class Spider(Spider):
                             if sid and title:
                                 series.append({'id': sid, 'name': title})
                     cfg['series'] = series
-                    print(f"🔍 推荐分类加载了 {len(series)} 个系列")
+                    print(f"🔍 分类 {cfg.get('name')} 加载了 {len(series)} 个系列")
                 else:
-                    # 其他分类使用空系列，避免API请求
+                    # 其他接口类型的分类使用空系列
                     cfg['series'] = []
         except Exception as e:
             print(f"加载分类失败: {e}")
